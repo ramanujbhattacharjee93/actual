@@ -17,11 +17,13 @@ import * as budget from './base';
 import * as cleanupGroupActions from './cleanup-groups';
 import * as cleanupActions from './cleanup-template';
 import { storeNoteCleanups } from './cleanup-template-notes';
+import { previewCreditCardReserves } from './credit-card-preview';
 import * as goalActions from './goal-template';
 import { sortCategories } from './sort-categories';
 import * as goalNoteActions from './template-notes';
 
 export type BudgetHandlers = {
+  'budget/preview-credit-card-reserves': typeof previewCreditCardReserves;
   'budget/budget-amount': typeof actions.setBudget;
   'budget/copy-previous-month': typeof actions.copyPreviousMonth;
   'budget/copy-single-month': typeof actions.copySinglePreviousMonth;
@@ -71,6 +73,7 @@ export type BudgetHandlers = {
 
 export const app = createApp<BudgetHandlers>();
 
+app.method('budget/preview-credit-card-reserves', previewCreditCardReserves);
 app.method('budget/budget-amount', mutator(undoable(actions.setBudget)));
 app.method(
   'budget/copy-previous-month',

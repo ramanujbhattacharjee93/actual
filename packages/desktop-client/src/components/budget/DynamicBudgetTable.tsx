@@ -14,6 +14,7 @@ import { useGlobalPref } from '#hooks/useGlobalPref';
 import { useBudgetMonthCount } from './BudgetMonthCountContext';
 import { BudgetPageHeader } from './BudgetPageHeader';
 import { BudgetTable } from './BudgetTable';
+import { CreditCardBudgetGuard } from './CreditCardBudgetGuard';
 import { clampMonth } from './MonthsContext';
 
 function getNumPossibleMonths(width: number, categoryWidth: number) {
@@ -172,15 +173,17 @@ const DynamicBudgetTable = ({
             monthBounds={monthBounds}
             onMonthSelect={_onMonthSelect}
           />
-          <BudgetTable
-            type={type}
-            prewarmStartMonth={prewarmStartMonth}
-            startMonth={startMonth}
-            numMonths={numMonths}
-            monthBounds={monthBounds}
-            onBudgetAction={onBudgetAction}
-            {...props}
-          />
+          <CreditCardBudgetGuard month={startMonth} numMonths={numMonths}>
+            <BudgetTable
+              type={type}
+              prewarmStartMonth={prewarmStartMonth}
+              startMonth={startMonth}
+              numMonths={numMonths}
+              monthBounds={monthBounds}
+              onBudgetAction={onBudgetAction}
+              {...props}
+            />
+          </CreditCardBudgetGuard>
         </ErrorBoundary>
       </View>
     </View>

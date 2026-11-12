@@ -28,6 +28,7 @@ export type Spreadsheets = {
     balanceUncleared: number;
   };
   'envelope-budget': {
+    'credit-card-state': string;
     // Common fields
     'uncategorized-amount': number;
     'uncategorized-balance': number;

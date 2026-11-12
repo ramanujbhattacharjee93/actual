@@ -5,6 +5,7 @@ import { ButtonWithLoading } from '@actual-app/components/button';
 import { Text } from '@actual-app/components/text';
 import { spacing } from '@actual-app/components/tokens';
 import { send } from '@actual-app/core/platform/client/connection';
+import { CREDIT_CARD_BUDGET_PREF } from '@actual-app/core/shared/credit-card-budget';
 
 import { Link } from '#components/common/Link';
 import { useSyncedPref } from '#hooks/useSyncedPref';
@@ -14,6 +15,7 @@ import { SettingsRow } from './SettingsRow';
 export function BudgetTypeSettings() {
   const { t } = useTranslation();
   const [budgetType = 'envelope', setBudgetType] = useSyncedPref('budgetType');
+  const [creditCardConfig] = useSyncedPref(CREDIT_CARD_BUDGET_PREF);
   const [isLoading, setIsLoading] = useState(false);
 
   async function onSwitchType() {
@@ -67,7 +69,11 @@ export function BudgetTypeSettings() {
         </>
       }
       control={
-        <ButtonWithLoading onPress={onSwitchType} isLoading={isLoading}>
+        <ButtonWithLoading
+          onPress={onSwitchType}
+          isLoading={isLoading}
+          isDisabled={creditCardConfig !== undefined}
+        >
           {budgetType === 'tracking' ? (
             <Trans>Switch to envelope budgeting</Trans>
           ) : (

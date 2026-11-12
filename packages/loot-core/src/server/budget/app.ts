@@ -17,12 +17,20 @@ import * as budget from './base';
 import * as cleanupGroupActions from './cleanup-groups';
 import * as cleanupActions from './cleanup-template';
 import { storeNoteCleanups } from './cleanup-template-notes';
+import {
+  enableCreditCardBudget,
+  getCreditCardBudgetAssignments,
+  getCreditCardBudgetState,
+} from './credit-card-budget';
 import { previewCreditCardReserves } from './credit-card-preview';
 import * as goalActions from './goal-template';
 import { sortCategories } from './sort-categories';
 import * as goalNoteActions from './template-notes';
 
 export type BudgetHandlers = {
+  'budget/enable-credit-cards': typeof enableCreditCardBudget;
+  'budget/credit-card-assignments': typeof getCreditCardBudgetAssignments;
+  'budget/credit-card-state': typeof getCreditCardBudgetState;
   'budget/preview-credit-card-reserves': typeof previewCreditCardReserves;
   'budget/budget-amount': typeof actions.setBudget;
   'budget/copy-previous-month': typeof actions.copyPreviousMonth;
@@ -73,6 +81,9 @@ export type BudgetHandlers = {
 
 export const app = createApp<BudgetHandlers>();
 
+app.method('budget/enable-credit-cards', mutator(enableCreditCardBudget));
+app.method('budget/credit-card-assignments', getCreditCardBudgetAssignments);
+app.method('budget/credit-card-state', getCreditCardBudgetState);
 app.method('budget/preview-credit-card-reserves', previewCreditCardReserves);
 app.method('budget/budget-amount', mutator(undoable(actions.setBudget)));
 app.method(
@@ -210,6 +221,10 @@ async function getBudgetBounds() {
 }
 
 async function envelopeBudgetMonth({ month }: { month: string }) {
+  const creditCardState = await getCreditCardBudgetState({ month });
+  if (creditCardState?.status === 'blocked') {
+    throw new Error('Credit-card budget is blocked; resolve its issues first.');
+  }
   const groups = await db.getCategoriesGrouped();
   const sheetName = monthUtils.sheetForMonth(month);
 

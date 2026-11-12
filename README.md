@@ -4,6 +4,53 @@
 
 ## Getting Started
 
+### This fork: experimental credit-card payment categories
+
+This fork adds an opt-in accounting mode, not just a payment preview. In
+**Settings > General > Budget**, select card accounts in a new disposable
+envelope budget and enable credit-card payment categories. Accounts may have
+starting balances, but existing spending or allocations prevent enablement.
+Fund spending categories normally; assign directly to the new payment
+categories only for opening debt or additional debt repayment. Payments remain
+ordinary account transfers. Desktop and mobile show reserves, uncovered debt,
+payment overspending, and excess reserves.
+
+The mode recalculates monthly history after edits and sync. Funded card purchases
+move cash into payment reserves without allocating it twice. Only cash
+overspending reduces next month's available funds; unfunded credit spending
+remains debt. Refunds reverse payment reserves, including refunds in a later
+month. Statement credits reduce debt without creating income.
+Every calculated month checks that unassigned money, held funds, envelopes, and
+the credit-overspending correction equal the actual cash-account balances.
+
+**Demo use only, not ready for real finances or YNAB migration.** Positive card
+balances, cash advances, card-to-card transfers, split or mismatched payment
+pairs, carryover overrides, and multiple cards sharing an underfunded category
+block the affected month and later months. Fix the source data in the account
+register or use the blocked-category allocation editor; no calculated payment amounts
+are returned while blocked. The original read-only preview remains available
+only for ordinary envelope budgets.
+
+All clients, including API integrations and offline devices, must use this fork.
+Stock Actual clients do not enforce this restriction and can show different
+totals. Mappings cannot be changed through settings or the generic preference
+API. There is no flag-only conversion back: restore a pre-enablement export or
+backup. Use a separate test budget, and keep YNAB authoritative.
+
+This is not a full YNAB parity claim: the existing Actual month-specific
+allocation and holding semantics remain in place. YNAB import, future-assignment
+parity, bank connections, and production conversion are separate work.
+
+The changes are isolated in `credit-card-month.ts`, `credit-card-budget.ts`, and
+the corresponding shared types and UI. Ordinary Actual budgets keep the upstream
+calculation path. Upgrades must pass the accounting, existing-budget, sync, and
+browser tests; a clean patch application alone is not an upgrade certification.
+
+Behavior references: YNAB's guides to
+[credit overspending](https://support.ynab.com/en_us/credit-card-overspending-an-overview-HkMGpSbJs),
+[refunds](https://support.ynab.com/en_us/credit-card-refunds-and-returns-H1J7qDWkj),
+and [statement credits](https://support.ynab.com/en_us/credit-card-rewards-and-statement-credits-a-guide-ryoRzYY0q).
+
 Actual is a local-first personal finance tool. It is 100% free and open-source, written in NodeJS, it has a synchronization element so that all your changes can move between devices without any heavy lifting.
 
 If you are interested in contributing, or want to know how development works, see our [contributing](https://actualbudget.org/docs/contributing/) document we would love to have you.

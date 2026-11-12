@@ -2,6 +2,7 @@ import * as db from '#server/db';
 import * as sheet from '#server/sheet';
 import * as monthUtils from '#shared/months';
 
+import { hasCreditCardBudget } from './credit-card-budget';
 import {
   calculateCreditCardReserves,
   sumReserveAmounts,
@@ -69,6 +70,7 @@ export async function previewCreditCardReserves({
   }
   const spreadsheet = sheet.get();
   if (
+    hasCreditCardBudget() ||
     !spreadsheet ||
     spreadsheet.meta().budgetType !== 'envelope' ||
     !spreadsheet.meta().createdMonths.has(month)

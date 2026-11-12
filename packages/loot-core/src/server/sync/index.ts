@@ -26,6 +26,7 @@ import * as sheet from '#server/sheet';
 import { resolveName } from '#server/spreadsheet/util';
 import * as undo from '#server/undo';
 import { sequential } from '#shared/async';
+import { CREDIT_CARD_BUDGET_PREF } from '#shared/credit-card-budget';
 import { isMissingSchemaError } from '#shared/errors';
 import { getIn, setIn } from '#shared/util';
 import type { MetadataPrefs } from '#types/prefs';
@@ -422,6 +423,7 @@ async function _applyMessages(messages: Message[], isReceived = false) {
 
   const prefsToSet: MetadataPrefs = {};
   let budgetTypeToSet: Message['value'] | undefined;
+  let creditCardBudgetChanged = false;
   const deferredMessages = new Set<Message>();
   const idsPerTable: Record<string, string[]> = {};
   let oldData: DataMap = new Map();
@@ -510,6 +512,9 @@ async function _applyMessages(messages: Message[], isReceived = false) {
             if (dataset === 'preferences' && row === 'budgetType') {
               budgetTypeToSet = value;
             }
+            if (dataset === 'preferences' && row === CREDIT_CARD_BUDGET_PREF) {
+              creditCardBudgetChanged = true;
+            }
           }
         } else {
           // Deferred messages must not be tracked in `added`: their
@@ -554,7 +559,9 @@ async function _applyMessages(messages: Message[], isReceived = false) {
   // The transaction succeeded, so we can update in-memory objects now
   undo.appendMessages(messages, oldData);
 
-  if (budgetTypeToSet !== undefined) {
+  if (creditCardBudgetChanged && sheet.get()) {
+    await setBudgetType(budgetTypeToSet ?? sheet.get().meta().budgetType, true);
+  } else if (budgetTypeToSet !== undefined) {
     void setBudgetType(budgetTypeToSet);
   }
 

@@ -9,6 +9,11 @@ import { getChangedValues } from '#shared/util';
 import type { CategoryGroupEntity } from '#types/models';
 
 import * as budgetActions from './actions';
+import {
+  createCreditCardBudgets,
+  hasCreditCardBudget,
+  invalidateCreditCardBudgets,
+} from './credit-card-budget';
 import * as envelopeBudget from './envelope';
 import * as trackingBudget from './tracking';
 
@@ -137,7 +142,7 @@ function getSumAmountsByMonth(
 // otherwise run one `SELECT SUM(amount)` per category per month; the caller
 // skips recomputing these and caches them directly instead.
 export async function reseedSumAmounts(months: string[]): Promise<string[]> {
-  if (months.length === 0) {
+  if (months.length === 0 || hasCreditCardBudget()) {
     return [];
   }
 
@@ -287,6 +292,32 @@ export function triggerBudgetChanges(oldValues, newValues) {
   sheet.startTransaction();
 
   try {
+    if (hasCreditCardBudget()) {
+      for (const table of ['zero_budgets', 'zero_budget_months']) {
+        for (const value of newValues.get(table)?.values() ?? []) {
+          if (table === 'zero_budgets') {
+            handleBudgetChange(value);
+          } else {
+            handleBudgetMonthChange(value);
+          }
+        }
+      }
+      if (
+        [
+          'zero_budgets',
+          'zero_budget_months',
+          'transactions',
+          'accounts',
+          'categories',
+          'category_groups',
+          'category_mapping',
+          'preferences',
+        ].some(table => newValues.has(table))
+      ) {
+        invalidateCreditCardBudgets();
+      }
+      return;
+    }
     newValues.forEach((items, table) => {
       const old = oldValues.get(table);
 
@@ -372,6 +403,11 @@ export async function doTransfer(categoryIds, transferId) {
 }
 
 export async function createBudget(months) {
+  if (hasCreditCardBudget()) {
+    createCreditCardBudgets(months);
+    await sheet.waitOnSpreadsheet();
+    return;
+  }
   const { data: groups }: { data: CategoryGroupEntity[] } = await aqlQuery(
     q('category_groups').select('*'),
   );
@@ -502,9 +538,9 @@ export async function createAllBudgets() {
   return { start, end: lastMonth };
 }
 
-export async function setType(type) {
+export async function setType(type, force = false) {
   const meta = sheet.get().meta();
-  if (type === meta.budgetType) {
+  if (type === meta.budgetType && !force) {
     return;
   }
 

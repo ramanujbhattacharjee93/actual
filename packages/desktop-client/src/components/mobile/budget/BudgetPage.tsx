@@ -45,6 +45,7 @@ import {
   useSortCategoriesMutation,
 } from '#budget';
 import { closeBudget } from '#budgetfiles/budgetfilesSlice';
+import { CreditCardBudgetGuard } from '#components/budget/CreditCardBudgetGuard';
 import { clampMonth } from '#components/budget/MonthsContext';
 import { prewarmMonth } from '#components/budget/util';
 import { FinancialText } from '#components/FinancialText';
@@ -590,7 +591,7 @@ export function BudgetPage() {
           }}
         >
           {({ onRefresh }) => (
-            <>
+            <CreditCardBudgetGuard month={startMonth}>
               <Banners month={startMonth} onBudgetAction={onBudgetAction} />
               <BudgetTable
                 // This key forces the whole table rerender when the number
@@ -604,7 +605,7 @@ export function BudgetPage() {
                 onEditCategoryGroup={onOpenCategoryGroupMenuModal}
                 onEditCategory={onOpenCategoryMenuModal}
               />
-            </>
+            </CreditCardBudgetGuard>
           )}
         </SyncRefresh>
       </SheetNameProvider>

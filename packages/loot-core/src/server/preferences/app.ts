@@ -13,6 +13,7 @@ import {
 } from '#server/prefs';
 import { getServer } from '#server/server-config';
 import { undoable } from '#server/undo';
+import { CREDIT_CARD_BUDGET_PREF } from '#shared/credit-card-budget';
 import { stringToInteger } from '#shared/util';
 import type { GlobalPrefs, MetadataPrefs, SyncedPrefs } from '#types/prefs';
 
@@ -53,6 +54,18 @@ async function saveSyncedPrefs({
 }) {
   if (!id) {
     return;
+  }
+  if (
+    id === CREDIT_CARD_BUDGET_PREF ||
+    (id === 'budgetType' &&
+      value !== 'envelope' &&
+      db.firstSync<db.DbPreference>('SELECT * FROM preferences WHERE id = ?', [
+        CREDIT_CARD_BUDGET_PREF,
+      ]))
+  ) {
+    throw new Error(
+      'Credit-card budgets require their dedicated setup workflow.',
+    );
   }
 
   await db.update('preferences', {

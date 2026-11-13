@@ -29,6 +29,10 @@ export type Spreadsheets = {
   };
   'envelope-budget': {
     'credit-card-state': string;
+    'credit-overspent': number;
+    'cash-overspent': number;
+    'payment-debt': number;
+    'from-credit': number;
     // Common fields
     'uncategorized-amount': number;
     'uncategorized-balance': number;

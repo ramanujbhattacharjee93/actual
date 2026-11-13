@@ -11,6 +11,10 @@ import type { RecurConfig, RecurPattern, RuleEntity } from '#types/models';
 
 import { runImportSteps } from './progress';
 import type { ImportTick } from './progress';
+import {
+  getYnabCreditCardMappings,
+  installImportedCreditCards,
+} from './ynab-credit-cards';
 import type {
   Budget,
   Payee,
@@ -295,6 +299,7 @@ async function importCategories(
   data: Budget,
   entityIdMap: Map<string, string>,
   tick: ImportTick,
+  creditCards = false,
 ) {
   // Hidden categories are put in its own group by YNAB,
   // so it's already handled.
@@ -302,8 +307,16 @@ async function importCategories(
   const categories = await send('api/categories-get');
   const incomeCatId = findIdByName(categories, 'Income');
   const ynabIncomeCategories = ['To be Budgeted', 'Inflow: Ready to Assign'];
+  const paymentCategoryIds = new Set(
+    creditCards
+      ? getYnabCreditCardMappings(data).map(card => card.categoryId)
+      : [],
+  );
 
   function checkSpecialCat(cat) {
+    if (paymentCategoryIds.has(cat.id)) {
+      return 'creditCard';
+    }
     if (
       cat.category_group_id ===
       findIdByName(data.category_groups, 'Internal Master Category')
@@ -387,14 +400,17 @@ async function importCategories(
       // Ignores internal category and credit cards
       if (
         !equalsIgnoreCase(group.name, 'Internal Master Category') &&
-        !equalsIgnoreCase(group.name, 'Credit Card Payments') &&
-        !equalsIgnoreCase(group.name, 'Hidden Categories') &&
+        (creditCards ||
+          !equalsIgnoreCase(group.name, 'Credit Card Payments')) &&
+        (creditCards || !equalsIgnoreCase(group.name, 'Hidden Categories')) &&
         !equalsIgnoreCase(group.name, 'Income')
       ) {
         const createdGroup = await createCategoryGroupWithUniqueName({
           name: group.name,
           is_income: false,
-          hidden: group.hidden,
+          hidden:
+            group.hidden ||
+            (creditCards && equalsIgnoreCase(group.name, 'Hidden Categories')),
         });
         groupId = createdGroup.id;
         entityIdMap.set(group.id, groupId);
@@ -420,7 +436,10 @@ async function importCategories(
         if (!cat.deleted) {
           // Handles special categories. Starting balance is a payee
           // in YNAB so it's handled in importTransactions
-          switch (checkSpecialCat(cat)) {
+          const special = checkSpecialCat(cat);
+          switch (
+            creditCards && special === 'creditCard' ? undefined : special
+          ) {
             case 'income': {
               // doesn't create new category, only assigns id
               const id = incomeCatId;
@@ -504,9 +523,7 @@ async function importPayeeLocations(
     const longitude = parseFloat(location.longitude);
 
     if (isNaN(latitude) || isNaN(longitude)) {
-      logger.log(
-        `Skipping location with invalid coordinates for payee ${actualPayeeId}: lat=${location.latitude}, lng=${location.longitude}`,
-      );
+      logger.log('Skipping a payee location with invalid coordinates.');
       continue;
     }
 
@@ -519,12 +536,9 @@ async function importPayeeLocations(
       });
       tick();
     } catch (error) {
-      const errorMessage =
-        error instanceof Error
-          ? error.message
-          : String(error ?? 'Unknown error');
       logger.error(
-        `Failed to import location for payee ${actualPayeeId} at (${latitude}, ${longitude}): ${errorMessage}`,
+        'Failed to import a payee location.',
+        error instanceof Error ? error.name : 'unknown',
       );
     }
   }
@@ -590,6 +604,7 @@ export async function importTransactions(
   entityIdMap: Map<string, string>,
   flagNameConflicts: Set<string>,
   tick?: ImportTick,
+  preserveSourceIds = false,
 ) {
   const payees = await send('api/payees-get');
   const categories = await send('api/categories-get');
@@ -618,7 +633,10 @@ export async function importTransactions(
   // reliably resolve transfers
   // Also identify orphan transfer transactions and subtransactions.
   for (const transaction of data.subtransactions) {
-    entityIdMap.set(transaction.id, uuidv4());
+    entityIdMap.set(
+      transaction.id,
+      preserveSourceIds ? transaction.id : uuidv4(),
+    );
 
     if (transaction.transfer_account_id) {
       orphanSubtransfer.push(transaction);
@@ -627,7 +645,10 @@ export async function importTransactions(
   }
 
   for (const transaction of data.transactions) {
-    entityIdMap.set(transaction.id, uuidv4());
+    entityIdMap.set(
+      transaction.id,
+      preserveSourceIds ? transaction.id : uuidv4(),
+    );
 
     if (
       transaction.transfer_account_id &&
@@ -779,6 +800,7 @@ export async function importTransactions(
             account: entityIdMap.get(transaction.account_id),
             date: transaction.date,
             amount: amountFromYnab(transaction.amount),
+            ...(preserveSourceIds && { sort_order: 0 }),
             category: entityIdMap.get(transaction.category_id) || null,
             cleared: ['cleared', 'reconciled'].includes(transaction.cleared),
             reconciled: transaction.cleared === 'reconciled',
@@ -788,11 +810,16 @@ export async function importTransactions(
               entityIdMap.get(transaction.transfer_transaction_id) ||
               orphanTrxIdSubtrxIdMap.get(transaction.id) ||
               null,
+            ...(preserveSourceIds &&
+              transaction.payee_id === startingPayeeYNAB && {
+                starting_balance_flag: true,
+              }),
             subtransactions: subtransactions
               ? subtransactions.map(subtrans => {
                   return {
                     id: entityIdMap.get(subtrans.id),
                     amount: amountFromYnab(subtrans.amount),
+                    ...(preserveSourceIds && { sort_order: 0 }),
                     category: entityIdMap.get(subtrans.category_id) || null,
                     notes: subtrans.memo,
                     transfer_id:
@@ -844,7 +871,10 @@ export async function importTransactions(
           }
 
           // Handle starting balances
-          if (
+          if (preserveSourceIds && transaction.payee_id === startingPayeeYNAB) {
+            newTransaction.category = startingBalanceCatId || incomeCatId;
+            newTransaction.payee = null;
+          } else if (
             transaction.payee_id === startingPayeeYNAB &&
             entityIdMap.get(transaction.category_id) === incomeCatId
           ) {
@@ -1132,6 +1162,7 @@ async function importBudgets(
   data: Budget,
   entityIdMap: Map<string, string>,
   tick: ImportTick,
+  creditCards = false,
 ) {
   // There should be info in the docs to deal with
   // no credit card category and how YNAB and Actual
@@ -1165,7 +1196,8 @@ async function importBudgets(
           if (
             !catId ||
             catBudget.category_group_id === internalCatIdYnab ||
-            catBudget.category_group_id === creditcardCatIdYnab
+            (!creditCards &&
+              catBudget.category_group_id === creditcardCatIdYnab)
           ) {
             return;
           }
@@ -1204,7 +1236,10 @@ export function getBudgetName(_filepath: string, data: Budget) {
   return data.budget_name || data.name;
 }
 
-export async function doImport(data: Budget) {
+export async function doImport(
+  data: Budget,
+  { creditCards = false }: { creditCards?: boolean } = {},
+) {
   const entityIdMap = new Map<string, string>();
   const flagNameConflicts = getFlagNameConflicts(data);
 
@@ -1217,7 +1252,12 @@ export async function doImport(data: Budget) {
     {
       step: 'categories',
       total: countLive(data.category_groups) + countLive(data.categories),
-      run: tick => importCategories(data, entityIdMap, tick),
+      run: async tick => {
+        await importCategories(data, entityIdMap, tick, creditCards);
+        if (creditCards) {
+          await installImportedCreditCards(data, entityIdMap);
+        }
+      },
     },
     {
       step: 'payees',
@@ -1240,7 +1280,13 @@ export async function doImport(data: Budget) {
       step: 'transactions',
       total: data.transactions.length,
       run: tick =>
-        importTransactions(data, entityIdMap, flagNameConflicts, tick),
+        importTransactions(
+          data,
+          entityIdMap,
+          flagNameConflicts,
+          tick,
+          creditCards,
+        ),
     },
     {
       step: 'scheduled-transactions',
@@ -1251,9 +1297,10 @@ export async function doImport(data: Budget) {
     {
       step: 'budgets',
       total: data.months.length,
-      run: tick => importBudgets(data, entityIdMap, tick),
+      run: tick => importBudgets(data, entityIdMap, tick, creditCards),
     },
   ]);
+  return entityIdMap;
 }
 
 function countLive(entities: { deleted?: boolean }[]) {

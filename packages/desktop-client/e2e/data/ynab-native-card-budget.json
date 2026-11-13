@@ -1,0 +1,193 @@
+{
+  "data": {
+    "plan": {
+      "id": "synthetic-plan",
+      "name": "Native YNAB synthetic",
+      "accounts": [
+        {
+          "id": "cash",
+          "name": "Cash",
+          "type": "checking",
+          "on_budget": true,
+          "closed": false,
+          "deleted": false,
+          "balance": 920000,
+          "cleared_balance": 920000,
+          "uncleared_balance": 0,
+          "transfer_payee_id": null
+        },
+        {
+          "id": "card",
+          "name": "Card",
+          "type": "creditCard",
+          "on_budget": true,
+          "closed": false,
+          "deleted": false,
+          "balance": -180000,
+          "cleared_balance": -180000,
+          "uncleared_balance": 0,
+          "transfer_payee_id": null
+        }
+      ],
+      "category_groups": [
+        {
+          "id": "income-group",
+          "name": "Internal Master Category",
+          "hidden": false,
+          "deleted": false
+        },
+        {
+          "id": "expenses",
+          "name": "Expenses",
+          "hidden": false,
+          "deleted": false
+        },
+        {
+          "id": "cards",
+          "name": "Credit Card Payments",
+          "hidden": false,
+          "deleted": false
+        }
+      ],
+      "categories": [
+        {
+          "id": "income",
+          "name": "Inflow: Ready to Assign",
+          "category_group_id": "income-group",
+          "hidden": false,
+          "deleted": false,
+          "budgeted": 0,
+          "activity": 0,
+          "balance": 0
+        },
+        {
+          "id": "food",
+          "name": "Food",
+          "category_group_id": "expenses",
+          "hidden": false,
+          "deleted": false,
+          "budgeted": 100000,
+          "activity": -60000,
+          "balance": 40000
+        },
+        {
+          "id": "payment",
+          "name": "Card",
+          "category_group_id": "cards",
+          "hidden": false,
+          "deleted": false,
+          "budgeted": 50000,
+          "activity": -20000,
+          "balance": 30000
+        }
+      ],
+      "payees": [
+        { "id": "opening", "name": "Starting Balance", "deleted": false },
+        { "id": "merchant", "name": "Merchant", "deleted": false },
+        {
+          "id": "to-card",
+          "name": "Transfer : Card",
+          "transfer_account_id": "card",
+          "deleted": false
+        },
+        {
+          "id": "to-cash",
+          "name": "Transfer : Cash",
+          "transfer_account_id": "cash",
+          "deleted": false
+        }
+      ],
+      "transactions": [
+        {
+          "id": "cash-opening",
+          "account_id": "cash",
+          "amount": 1000000,
+          "date": "2017-01-01",
+          "category_id": "income",
+          "payee_id": "opening",
+          "cleared": "cleared",
+          "approved": true,
+          "deleted": false
+        },
+        {
+          "id": "card-opening",
+          "account_id": "card",
+          "amount": -200000,
+          "date": "2017-01-01",
+          "category_id": "income",
+          "payee_id": "opening",
+          "cleared": "cleared",
+          "approved": true,
+          "deleted": false
+        },
+        {
+          "id": "purchase",
+          "account_id": "card",
+          "amount": -60000,
+          "date": "2017-01-10",
+          "category_id": "food",
+          "payee_id": "merchant",
+          "cleared": "cleared",
+          "approved": true,
+          "deleted": false
+        },
+        {
+          "id": "cash-payment",
+          "account_id": "cash",
+          "amount": -80000,
+          "date": "2017-01-20",
+          "payee_id": "to-card",
+          "transfer_account_id": "card",
+          "transfer_transaction_id": "card-payment",
+          "cleared": "cleared",
+          "approved": true,
+          "deleted": false
+        },
+        {
+          "id": "card-payment",
+          "account_id": "card",
+          "amount": 80000,
+          "date": "2017-01-20",
+          "payee_id": "to-cash",
+          "transfer_account_id": "cash",
+          "transfer_transaction_id": "cash-payment",
+          "cleared": "cleared",
+          "approved": true,
+          "deleted": false
+        }
+      ],
+      "months": [
+        {
+          "month": "2017-01-01",
+          "income": 1000000,
+          "budgeted": 150000,
+          "activity": -60000,
+          "to_be_budgeted": 850000,
+          "deleted": false,
+          "categories": [
+            {
+              "id": "food",
+              "name": "Food",
+              "category_group_id": "expenses",
+              "hidden": false,
+              "deleted": false,
+              "budgeted": 100000,
+              "activity": -60000,
+              "balance": 40000
+            },
+            {
+              "id": "payment",
+              "name": "Card",
+              "category_group_id": "cards",
+              "hidden": false,
+              "deleted": false,
+              "budgeted": 50000,
+              "activity": -20000,
+              "balance": 30000
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

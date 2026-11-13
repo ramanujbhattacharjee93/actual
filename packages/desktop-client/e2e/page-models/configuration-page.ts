@@ -55,7 +55,11 @@ export class ConfigurationPage {
     return budgetPage;
   }
 
-  async importBudget(type: 'YNAB4' | 'nYNAB' | 'Actual', file: string) {
+  async importBudget(
+    type: 'YNAB4' | 'nYNAB' | 'Actual',
+    file: string,
+    creditCards = false,
+  ) {
     const fileChooserPromise = this.page.waitForEvent('filechooser');
     await this.page.getByRole('button', { name: 'Import my budget' }).click();
 
@@ -75,6 +79,11 @@ export class ConfigurationPage {
         await this.page
           .getByRole('button', { name: 'nYNAB The newer web app' })
           .click();
+        await this.page
+          .getByRole('checkbox', {
+            name: 'Use YNAB-style credit-card payment categories',
+          })
+          .setChecked(creditCards);
         await this.page.getByRole('button', { name: 'Select file...' }).click();
         break;
 

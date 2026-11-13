@@ -7,7 +7,11 @@ import { theme } from '@actual-app/components/theme';
 import { spacing } from '@actual-app/components/tokens';
 import { View } from '@actual-app/components/view';
 import { send } from '@actual-app/core/platform/client/connection';
-import { CREDIT_CARD_BUDGET_PREF } from '@actual-app/core/shared/credit-card-budget';
+import {
+  CREDIT_CARD_BUDGET_PREF,
+  parseCreditCardBudgetConfig,
+} from '@actual-app/core/shared/credit-card-budget';
+import type { CreditCardBudgetConfig } from '@actual-app/core/shared/credit-card-budget';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { budgetBoundsQueries, categoryQueries } from '#budget';
@@ -22,6 +26,14 @@ import { SettingsRow } from './SettingsRow';
 export function CreditCardBudgetSettings() {
   const { t } = useTranslation();
   const [config] = useSyncedPref(CREDIT_CARD_BUDGET_PREF);
+  let parsed: CreditCardBudgetConfig | undefined;
+  try {
+    parsed = config ? parseCreditCardBudgetConfig(config) : undefined;
+  } catch {
+    // The budget guard shows incompatible configurations without changing them.
+  }
+  const native = parsed?.version === 2;
+  const legacy = config !== undefined && !native;
   const [budgetType = 'envelope'] = useSyncedPref('budgetType');
   const { data: accounts = [] } = useAccounts();
   const [accountIds, setAccountIds] = useState<string[]>([]);
@@ -35,11 +47,20 @@ export function CreditCardBudgetSettings() {
     setLoading(true);
     setError(false);
     try {
-      await send('budget/enable-credit-cards', {
-        accountIds,
-        paymentGroupName: t('Credit Card Payments'),
-        forkOnlyAcknowledged: acknowledged,
-      });
+      if (native) {
+        await send('budget/add-credit-card', {
+          accountId: accountIds[0],
+          forkOnlyAcknowledged: acknowledged,
+          paymentGroupName: t('Credit Card Payments'),
+        });
+      } else {
+        await send('budget/enable-credit-cards', {
+          accountIds,
+          paymentGroupName: t('Credit Card Payments'),
+          forkOnlyAcknowledged: acknowledged,
+        });
+      }
+      setAccountIds([]);
       await dispatch(loadPrefs()).unwrap();
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: categoryQueries.all() }),
@@ -54,33 +75,48 @@ export function CreditCardBudgetSettings() {
 
   return (
     <SettingsRow
-      title={t('Credit-card payment categories (experimental)')}
+      title={t('Credit-card payment categories')}
       description={
         <Trans>
-          Demo budgets only. Funded purchases move money to a payment category
-          for each card. Assign extra money there to pay down existing debt.
-          This changes budget accounting and is not ready for a YNAB migration.
+          Funded purchases move money to a payment category for each card.
+          Assign extra money there to pay down existing debt. Positive card
+          balances behave like cash. Use the card-aware YNAB JSON import to
+          preserve existing account and payment-category history.
         </Trans>
       }
     >
-      {config !== undefined ? (
+      {legacy ? (
         <Text>
           <Trans>
-            Enabled. Use only this fork on every device and API client. Mappings
-            are fixed; restore a pre-enablement backup to return to ordinary
-            Actual budgeting.
+            This budget retains version 1 demo accounting. Its history has not
+            been reinterpreted. Create a new budget or use the card-aware YNAB
+            import for native accounting; do not change the version flag
+            manually.
           </Trans>
         </Text>
       ) : (
         <View style={{ gap: spacing.sm }}>
           <Text>
-            <Trans>
-              Start a new envelope budget and add all your card accounts first.
-              Only starting balances are allowed before enabling.
-            </Trans>
+            {native ? (
+              <Trans>
+                Enabled. Use this fork on every device and API client. To add
+                another card, create its account with only a starting balance
+                and select it below.
+              </Trans>
+            ) : (
+              <Trans>
+                Start a new envelope budget and add all your card accounts
+                first. Only starting balances are allowed before enabling.
+              </Trans>
+            )}
           </Text>
           {accounts
-            .filter(account => !account.closed && !account.offbudget)
+            .filter(
+              account =>
+                !account.closed &&
+                !account.offbudget &&
+                !parsed?.cards.some(card => card.accountId === account.id),
+            )
             .map(account => (
               <label key={account.id}>
                 <Checkbox
@@ -89,7 +125,9 @@ export function CreditCardBudgetSettings() {
                   onChange={event =>
                     setAccountIds(
                       event.currentTarget.checked
-                        ? [...accountIds, account.id]
+                        ? native
+                          ? [account.id]
+                          : [...accountIds, account.id]
                         : accountIds.filter(id => id !== account.id),
                     )
                   }
@@ -104,8 +142,8 @@ export function CreditCardBudgetSettings() {
               onChange={event => setAcknowledged(event.currentTarget.checked)}
             />
             <Trans>
-              This is a disposable demo budget. I will not open it with stock
-              Actual clients or use it for real payment decisions.
+              I will use this fork on every device and API client. Stock Actual
+              clients do not understand these payment categories.
             </Trans>
           </label>
           <ButtonWithLoading
@@ -117,14 +155,18 @@ export function CreditCardBudgetSettings() {
             }
             onPress={enable}
           >
-            <Trans>Enable credit-card payment categories</Trans>
+            {native ? (
+              <Trans>Add card payment category</Trans>
+            ) : (
+              <Trans>Enable credit-card payment categories</Trans>
+            )}
           </ButtonWithLoading>
           {error && (
             <Text role="alert" style={{ color: theme.errorText }}>
               <Trans>
-                Setup failed. Use a new envelope budget with only starting
-                balances, select card accounts, and make sure no Credit Card
-                Payments group already exists.
+                Setup failed. Choose a new card account with only a starting
+                balance. Initial enablement requires a new envelope budget; use
+                the YNAB importer for existing YNAB history.
               </Trans>
             </Text>
           )}

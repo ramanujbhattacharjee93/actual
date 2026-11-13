@@ -11,7 +11,7 @@ import type { CategoryEntity } from '@actual-app/core/types/models';
 import { css, cx } from '@emotion/css';
 import { AutoTextSize } from 'auto-text-size';
 
-import { BalanceWithCarryover } from '#components/budget/BalanceWithCarryover';
+import { CreditCardBalance } from '#components/budget/CreditCardBalance';
 import {
   getGoalRingLabel,
   GoalProgressRing,
@@ -74,7 +74,8 @@ export function BalanceCell({
   const format = useFormat();
 
   return (
-    <BalanceWithCarryover
+    <CreditCardBalance
+      categoryId={category.id}
       aria-label={t('Balance for {{categoryName}} category', {
         categoryName: category.name,
       })} // Translated aria-label
@@ -151,7 +152,7 @@ export function BalanceCell({
           </Button>
         );
       }}
-    </BalanceWithCarryover>
+    </CreditCardBalance>
   );
 }
 

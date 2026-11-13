@@ -17,6 +17,7 @@ import * as monthUtils from '@actual-app/core/shared/months';
 import { css } from '@emotion/css';
 
 import { BalanceWithCarryover } from '#components/budget/BalanceWithCarryover';
+import { CreditCardBalance } from '#components/budget/CreditCardBalance';
 import { makeAmountGrey } from '#components/budget/util';
 import { NotesButton } from '#components/NotesButton';
 import { CellValue, CellValueText } from '#components/spreadsheet/CellValue';
@@ -517,7 +518,8 @@ export const ExpenseCategoryMonth = memo(function ExpenseCategoryMonth({
             padding: 0,
           }}
         >
-          <BalanceWithCarryover
+          <CreditCardBalance
+            categoryId={category.id}
             carryover={envelopeBudget.catCarryover(category.id)}
             balance={envelopeBudget.catBalance(category.id)}
             goal={envelopeBudget.catGoal(category.id)}

@@ -1,8 +1,9 @@
 export const CREDIT_CARD_BUDGET_PREF = 'credit-card-budget-v1';
 
 export type CreditCardBudgetConfig = {
-  version: 1;
+  version: 1 | 2;
   cards: { accountId: string; paymentCategoryId: string }[];
+  debtCategoryIds?: string[];
 };
 
 export function parseCreditCardBudgetConfig(
@@ -13,7 +14,7 @@ export function parseCreditCardBudgetConfig(
     !parsed ||
     typeof parsed !== 'object' ||
     !('version' in parsed) ||
-    parsed.version !== 1 ||
+    (parsed.version !== 1 && parsed.version !== 2) ||
     !('cards' in parsed) ||
     !Array.isArray(parsed.cards) ||
     parsed.cards.length === 0
@@ -44,7 +45,28 @@ export function parseCreditCardBudgetConfig(
       paymentCategoryId: card.paymentCategoryId,
     };
   });
-  return { version: 1, cards };
+  const debtCategoryIds: string[] = [];
+  if (parsed.version === 2 && 'debtCategoryIds' in parsed) {
+    if (!Array.isArray(parsed.debtCategoryIds)) {
+      throw new Error('Invalid debt-only categories.');
+    }
+    for (const id of parsed.debtCategoryIds) {
+      if (
+        typeof id !== 'string' ||
+        !id ||
+        categories.has(id) ||
+        debtCategoryIds.includes(id)
+      ) {
+        throw new Error('Invalid debt-only category mapping.');
+      }
+      debtCategoryIds.push(id);
+    }
+  }
+  return {
+    version: parsed.version,
+    cards,
+    ...(debtCategoryIds.length > 0 && { debtCategoryIds }),
+  };
 }
 
 export type CreditCardBudgetIssue = {
@@ -60,6 +82,7 @@ export type CreditCardBudgetIssue = {
     | 'uncategorized-spending'
     | 'payment-category-transaction'
     | 'unsupported-carryover';
+
   accountId?: string;
   categoryId?: string;
   transactionId?: string;
@@ -88,6 +111,7 @@ export type CreditCardBudgetReady = {
     unfundedDebt: number;
     paymentShortfall: number;
     excessReserve: number;
+    interestCharged?: number;
   }[];
   income: number;
   fromLastMonth: number;
@@ -100,6 +124,8 @@ export type CreditCardBudgetReady = {
   toBudget: number;
   cashOverspent: number;
   cashBalance: number;
+  creditAdjustments?: number;
+  autoBuffered?: number;
 };
 
 export type CreditCardBudgetState =

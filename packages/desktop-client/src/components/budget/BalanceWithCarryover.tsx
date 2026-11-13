@@ -87,6 +87,7 @@ type BalanceWithCarryoverProps = Omit<
   isIncome?: boolean;
   shouldInlineGoalStatus?: boolean;
   CarryoverIndicator?: ComponentType<CarryoverIndicatorProps>;
+  amountStyle?: (balance: number) => CSSProperties | undefined;
 };
 
 export function BalanceWithCarryover({
@@ -99,6 +100,7 @@ export function BalanceWithCarryover({
   isIncome,
   shouldInlineGoalStatus,
   CarryoverIndicator: CarryoverIndicatorComponent = CarryoverIndicator,
+  amountStyle,
   children,
   ...props
 }: BalanceWithCarryoverProps) {
@@ -126,13 +128,15 @@ export function BalanceWithCarryover({
         )
       : null;
 
-  const getBalanceAmountStyle = (balanceValue: number) =>
-    makeBalanceAmountStyle(
+  const getBalanceAmountStyle = (balanceValue: number) => ({
+    ...makeBalanceAmountStyle(
       balanceValue,
       canShowGoal ? goalValue : null,
       getHave(balanceValue),
       decimalPlaces,
-    );
+    ),
+    ...amountStyle?.(balanceValue),
+  });
 
   const getDefaultClassName = (balanceValue: number) =>
     css({

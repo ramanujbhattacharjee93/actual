@@ -944,6 +944,7 @@ async function _fullSync(
     cloudFileId,
     groupId,
     lastSyncedTimestamp,
+    pendingYnabCardReview,
   } = prefs.getPrefs() || {};
 
   clearFullSyncTimeout();
@@ -951,7 +952,8 @@ async function _fullSync(
   if (
     checkSyncingMode('disabled') ||
     checkSyncingMode('offline') ||
-    !currentId
+    !currentId ||
+    pendingYnabCardReview
   ) {
     return [];
   }

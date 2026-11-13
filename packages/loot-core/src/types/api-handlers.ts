@@ -57,7 +57,7 @@ export type ApiHandlers = {
 
   'api/start-import': (arg: { budgetName: string }) => Promise<void>;
 
-  'api/finish-import': () => Promise<void>;
+  'api/finish-import': (arg?: { avoidUpload?: boolean }) => Promise<void>;
 
   'api/abort-import': () => Promise<void>;
 

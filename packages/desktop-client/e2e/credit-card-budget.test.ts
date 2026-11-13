@@ -46,13 +46,11 @@ for (const viewport of [
         .check();
       await page
         .getByRole('checkbox', {
-          name: /This is a disposable demo budget/,
+          name: /I will use this fork on every device/,
         })
         .check();
       await enable.click();
-      await expect(
-        page.getByText(/Enabled\. Use only this fork/),
-      ).toBeVisible();
+      await expect(page.getByText(/Enabled\. Use this fork/)).toBeVisible();
       await expect(
         page.getByRole('button', {
           name: 'Switch to tracking budgeting',
@@ -116,13 +114,15 @@ for (const viewport of [
           date: '2017-01-11',
         });
       }, fixture);
-      await expect(page.getByRole('alert')).toContainText(
-        'Fully fund a category shared by multiple cards',
-      );
-      await page.getByLabel(/^Assigned to/).fill('120');
-      await page
-        .getByRole('button', { name: 'Update assigned amount' })
-        .click();
+      await expect(panel).toContainText('Credit overspending 20.00');
+      await expect(page.getByRole('alert')).toHaveCount(0);
+      await page.evaluate(async ({ expenseId }) => {
+        await window.$send('budget/budget-amount', {
+          month: '2017-01',
+          category: expenseId,
+          amount: 12000,
+        });
+      }, fixture);
       await expect(page.getByTestId('credit-card-payments')).toBeVisible();
       await expect(page.getByRole('alert')).toHaveCount(0);
 
@@ -140,11 +140,9 @@ for (const viewport of [
           date: '2017-01-20',
         });
       }, fixture);
-      await expect(page.getByRole('alert')).toContainText(
-        'Positive card balances are not supported yet.',
-      );
-      await expect(page.getByTestId('credit-card-payments')).toHaveCount(0);
-      await expect(page.getByTestId('budget-table')).toHaveCount(0);
+      await expect(panel).toContainText('Excess reserve 60.00');
+      await expect(page.getByRole('alert')).toHaveCount(0);
+      await expect(page.getByTestId('budget-table')).toBeVisible();
     } finally {
       await page.close();
     }

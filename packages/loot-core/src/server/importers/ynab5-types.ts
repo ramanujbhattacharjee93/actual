@@ -175,6 +175,7 @@ export type Transaction = {
   import_payee_name_original?: string | null;
   debt_transaction_type?: DebtTransactionType | null;
   deleted: boolean;
+  subtransactions?: Subtransaction[];
 };
 
 // Source: https://api.ynab.com/papi/open_api_spec.yaml#/components/schemas/TransactionClearedStatus
@@ -239,6 +240,7 @@ export type ScheduledTransaction = {
   category_id?: string | null;
   transfer_account_id?: string | null;
   deleted: boolean;
+  subtransactions?: ScheduledSubtransaction[];
 };
 
 // Source: https://api.ynab.com/papi/open_api_spec.yaml#/components/schemas/ScheduledSubTransaction

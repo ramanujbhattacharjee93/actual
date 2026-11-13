@@ -434,8 +434,13 @@ handlers['api/start-import'] = async function ({ budgetName }) {
   IMPORT_MODE = true;
 };
 
-handlers['api/finish-import'] = async function () {
+handlers['api/finish-import'] = async function ({
+  avoidUpload = false,
+}: { avoidUpload?: boolean } = {}) {
   checkFileOpen();
+  if (avoidUpload) {
+    await prefs.savePrefs({ pendingYnabCardReview: true });
+  }
 
   sheet.get().markCacheDirty();
 
@@ -449,9 +454,11 @@ handlers['api/finish-import'] = async function () {
   await handlers['get-budget-bounds']();
   await sheet.waitOnSpreadsheet();
 
-  await cloudStorage.upload().catch(err => {
-    logger.warn('cloudStorage.upload failed during finish-import', err);
-  });
+  if (!avoidUpload) {
+    await cloudStorage.upload().catch(err => {
+      logger.warn('cloudStorage.upload failed during finish-import', err);
+    });
+  }
 
   connection.send('finish-import');
   IMPORT_MODE = false;

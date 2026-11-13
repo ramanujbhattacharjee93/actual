@@ -208,9 +208,16 @@ async function uploadBudget({ id }: { id?: Budget['id'] } = {}): Promise<{
     await prefs.loadPrefs(id);
   }
 
+  const pendingReview = prefs.getPrefs()?.pendingYnabCardReview;
   try {
+    if (pendingReview) {
+      await prefs.savePrefs({ pendingYnabCardReview: false });
+    }
     await cloudStorage.upload();
   } catch (e) {
+    if (pendingReview) {
+      await prefs.savePrefs({ pendingYnabCardReview: true });
+    }
     logger.log(e);
     if (e.type === 'FileUploadError') {
       return { error: e };
@@ -557,8 +564,10 @@ async function importBudget({
   buffer,
   filename,
   type,
+  creditCards,
 }: {
   type: ImportableBudgetType;
+  creditCards?: boolean;
   /** Path to the file to import, on the engine's filesystem. */
   filepath?: string;
   /** Raw contents of the file to import; alternative to `filepath`. */
@@ -586,12 +595,17 @@ async function importBudget({
       throw new Error('Either `filepath` or `buffer` must be given');
     }
 
-    const results = await handleBudgetImport(type, name, contents);
+    const results = await handleBudgetImport(type, name, contents, {
+      creditCards,
+    });
     if (results && results.error) {
       return results;
     }
     // A successful import leaves the imported budget loaded
-    return { id: prefs.getPrefs()?.id };
+    return {
+      id: prefs.getPrefs()?.id,
+      ...(results?.meta && { meta: results.meta }),
+    };
   } catch (err) {
     err.message = 'Error importing budget: ' + err.message;
     captureException(err);

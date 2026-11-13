@@ -18,6 +18,7 @@ import * as cleanupGroupActions from './cleanup-groups';
 import * as cleanupActions from './cleanup-template';
 import { storeNoteCleanups } from './cleanup-template-notes';
 import {
+  addCreditCard,
   enableCreditCardBudget,
   getCreditCardBudgetAssignments,
   getCreditCardBudgetState,
@@ -28,6 +29,7 @@ import { sortCategories } from './sort-categories';
 import * as goalNoteActions from './template-notes';
 
 export type BudgetHandlers = {
+  'budget/add-credit-card': typeof addCreditCard;
   'budget/enable-credit-cards': typeof enableCreditCardBudget;
   'budget/credit-card-assignments': typeof getCreditCardBudgetAssignments;
   'budget/credit-card-state': typeof getCreditCardBudgetState;
@@ -82,6 +84,7 @@ export type BudgetHandlers = {
 export const app = createApp<BudgetHandlers>();
 
 app.method('budget/enable-credit-cards', mutator(enableCreditCardBudget));
+app.method('budget/add-credit-card', mutator(addCreditCard));
 app.method('budget/credit-card-assignments', getCreditCardBudgetAssignments);
 app.method('budget/credit-card-state', getCreditCardBudgetState);
 app.method('budget/preview-credit-card-reserves', previewCreditCardReserves);

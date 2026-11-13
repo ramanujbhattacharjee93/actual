@@ -180,6 +180,7 @@ export const envelopeBudget = {
   totalIncome: 'total-income',
   totalSpent: 'total-spent',
   totalBalance: 'total-leftover',
+  creditAdjustments: 'from-credit',
 
   groupSumAmount: envelopeParametrizedField('group-sum-amount'),
   groupIncomeReceived: 'total-income',
@@ -193,6 +194,9 @@ export const envelopeBudget = {
   catCarryover: envelopeParametrizedField('carryover'),
   catGoal: envelopeParametrizedField('goal'),
   catLongGoal: envelopeParametrizedField('long-goal'),
+  catCreditOverspent: envelopeParametrizedField('credit-overspent'),
+  catCashOverspent: envelopeParametrizedField('cash-overspent'),
+  catPaymentDebt: envelopeParametrizedField('payment-debt'),
 } satisfies BudgetType<'envelope-budget'>;
 
 export const trackingBudget = {

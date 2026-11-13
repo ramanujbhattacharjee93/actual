@@ -91,6 +91,7 @@ export type MetadataPrefs = Partial<{
   resetClock: boolean;
   lastScheduleRun: string;
   userId: string; // TODO: delete this (unused)
+  pendingYnabCardReview: boolean;
 }>;
 
 /**

@@ -239,12 +239,20 @@ export const duplicateBudget = createAppAsyncThunk(
 type ImportBudgetPayload = {
   filepath: string;
   type: Parameters<Handlers['import-budget']>[0]['type'];
+  creditCards?: boolean;
 };
 
 export const importBudget = createAppAsyncThunk(
   `${sliceName}/importBudget`,
-  async ({ filepath, type }: ImportBudgetPayload, { dispatch }) => {
-    const { error, meta } = await send('import-budget', { filepath, type });
+  async (
+    { filepath, type, creditCards }: ImportBudgetPayload,
+    { dispatch },
+  ) => {
+    const { error, meta } = await send('import-budget', {
+      filepath,
+      type,
+      creditCards,
+    });
     if (error) {
       const zipMeta = getUnsafeZipMeta(meta);
       throw new Error(zipMeta ? getUnsafeZipError(zipMeta) : error);

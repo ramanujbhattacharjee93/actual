@@ -16,6 +16,7 @@ import type {
   CreditCardMonthCategory,
   CreditCardMonthTransaction,
 } from './credit-card-month';
+import { calculateCreditCardMonth as calculateLegacyCreditCardMonth } from './credit-card-month-v1';
 import { sumReserveAmounts as sum } from './credit-card-reserves';
 
 const STATE_CELL = 'credit-card-state';
@@ -108,6 +109,14 @@ function calculateMonth(
       };
     }
   }
+  if (
+    (config.debtCategoryIds ?? []).some(
+      id =>
+        !categories.some(category => category.id === id && !category.is_income),
+    )
+  ) {
+    return { status: 'blocked', month, issues: [{ code: 'invalid-mapping' }] };
+  }
   const dbMonth = Number(month.replace('-', ''));
   const budgets = db.runQuery<db.DbZeroBudget>(
     'SELECT * FROM zero_budgets WHERE month = ?',
@@ -127,7 +136,8 @@ function calculateMonth(
   const transactions = db.runQuery<CreditCardMonthTransaction>(
     `SELECT t.*, other.account AS transfer_account,
             other.amount AS transfer_amount, other.date AS transfer_date,
-            other.transfer_id AS transfer_back, a2.offbudget AS transfer_offbudget
+            other.transfer_id AS transfer_back, a2.offbudget AS transfer_offbudget,
+            other.is_parent AS transfer_is_parent
        FROM v_transactions_internal_alive t
        JOIN accounts a ON a.id = t.account AND a.tombstone = 0
        LEFT JOIN v_transactions_internal_alive other ON other.id = t.transfer_id
@@ -142,7 +152,11 @@ function calculateMonth(
     [month],
   );
   try {
-    return calculateCreditCardMonth({
+    const calculate =
+      config.version === 1
+        ? calculateLegacyCreditCardMonth
+        : calculateCreditCardMonth;
+    return calculate({
       month,
       config,
       categories: inputs,
@@ -292,6 +306,29 @@ export function createCreditCardBudgets(requestedMonths: string[]): void {
           );
           createCalculatedCell(
             sheetName,
+            `credit-overspent-${category.id}`,
+            state => state.categories[category.id]?.creditOverspent ?? 0,
+          );
+          createCalculatedCell(
+            sheetName,
+            `cash-overspent-${category.id}`,
+            state => state.categories[category.id]?.cashOverspent ?? 0,
+          );
+          createCalculatedCell(
+            sheetName,
+            `payment-debt-${category.id}`,
+            state =>
+              Math.max(
+                0,
+                -(
+                  state.cards.find(
+                    card => card.paymentCategoryId === category.id,
+                  )?.balance ?? 0
+                ),
+              ),
+          );
+          createCalculatedCell(
+            sheetName,
             `leftover-pos-${category.id}`,
             state => Math.max(0, state.categories[category.id]?.available ?? 0),
           );
@@ -330,7 +367,16 @@ export function createCreditCardBudgets(requestedMonths: string[]): void {
         createCalculatedCell(sheetName, cell, state => state[field]);
       }
       spreadsheet.createStatic(sheetName, 'buffered', 0);
-      spreadsheet.createStatic(sheetName, 'buffered-auto', 0);
+      createCalculatedCell(
+        sheetName,
+        'buffered-auto',
+        state => state.autoBuffered ?? 0,
+      );
+      createCalculatedCell(
+        sheetName,
+        'from-credit',
+        state => state.creditAdjustments ?? 0,
+      );
       meta.createdMonths.add(month);
     }
     spreadsheet.setMeta(meta);
@@ -363,7 +409,7 @@ export async function enableCreditCardBudget({
     throw new Error('Credit-card mappings cannot be changed after enablement.');
   }
   if (!forkOnlyAcknowledged) {
-    throw new Error('Acknowledge the fork-only demo-budget restriction.');
+    throw new Error('Acknowledge the fork-only accounting requirement.');
   }
   const budgetType = db.firstSync<db.DbPreference>(
     'SELECT * FROM preferences WHERE id = ?',
@@ -382,7 +428,7 @@ export async function enableCreditCardBudget({
      ) AS count`,
   );
   if (existing?.count) {
-    throw new Error('Enable credit-card budgeting only in a new demo budget.');
+    throw new Error('Use a new budget or the card-aware YNAB importer.');
   }
   if (
     !paymentGroupName.trim() ||
@@ -405,7 +451,7 @@ export async function enableCreditCardBudget({
   ) {
     throw new Error('Choose distinct, open on-budget credit-card accounts.');
   }
-  const config: CreditCardBudgetConfig = { version: 1, cards: [] };
+  const config: CreditCardBudgetConfig = { version: 2, cards: [] };
   await batchMessages(async () => {
     const groupId = await db.insertCategoryGroup({
       name: paymentGroupName.trim(),
@@ -421,6 +467,80 @@ export async function enableCreditCardBudget({
       });
       config.cards.push({ accountId, paymentCategoryId });
     }
+    await db.update('preferences', {
+      id: CREDIT_CARD_BUDGET_PREF,
+      value: JSON.stringify(config),
+    });
+  });
+  return config;
+}
+
+export async function addCreditCard({
+  accountId,
+  forkOnlyAcknowledged,
+  paymentGroupName = 'Credit Card Payments',
+}: {
+  accountId: string;
+  forkOnlyAcknowledged: boolean;
+  paymentGroupName?: string;
+}): Promise<CreditCardBudgetConfig> {
+  const config = getConfig();
+  if (config.version !== 2 || !forkOnlyAcknowledged) {
+    throw new Error('Adding cards requires native fork accounting.');
+  }
+  if (!paymentGroupName.trim()) {
+    throw new Error('Choose a nonempty payment category group name.');
+  }
+  if (config.cards.some(card => card.accountId === accountId)) {
+    throw new Error('This account already has a payment category.');
+  }
+  const account = db.firstSync<db.DbAccount>(
+    'SELECT * FROM accounts WHERE id = ? AND tombstone = 0 AND offbudget = 0 AND closed = 0',
+    [accountId],
+  );
+  const spending = db.firstSync<{ count: number }>(
+    `SELECT COUNT(*) AS count FROM v_transactions_internal_alive
+      WHERE account = ? AND COALESCE(starting_balance_flag, 0) = 0`,
+    [accountId],
+  );
+  if (!account || spending?.count) {
+    throw new Error(
+      'Choose a new on-budget card account with only a starting balance.',
+    );
+  }
+  const category = db.firstSync<db.DbCategory>(
+    `SELECT c.* FROM categories c JOIN category_groups g ON g.id = c.cat_group
+      WHERE c.id IN (${config.cards.map(() => '?').join(',')})
+        AND c.tombstone = 0 AND c.hidden = 0 AND g.tombstone = 0 AND g.hidden = 0
+      ORDER BY c.id LIMIT 1`,
+    config.cards.map(card => card.paymentCategoryId),
+  );
+  await batchMessages(async () => {
+    let groupId = category?.cat_group;
+    if (!groupId) {
+      const groups = db.runQuery<db.DbCategoryGroup>(
+        'SELECT * FROM category_groups WHERE tombstone = 0',
+        [],
+        true,
+      );
+      groupId = groups.find(
+        group =>
+          group.name === paymentGroupName && !group.hidden && !group.is_income,
+      )?.id;
+      if (!groupId) {
+        let name = paymentGroupName;
+        let suffix = 1;
+        while (groups.some(group => group.name === name)) {
+          name = `${paymentGroupName} (${suffix++})`;
+        }
+        groupId = await db.insertCategoryGroup({ name });
+      }
+    }
+    const paymentCategoryId = await db.insertCategory({
+      name: account.name,
+      cat_group: groupId,
+    });
+    config.cards.push({ accountId, paymentCategoryId });
     await db.update('preferences', {
       id: CREDIT_CARD_BUDGET_PREF,
       value: JSON.stringify(config),

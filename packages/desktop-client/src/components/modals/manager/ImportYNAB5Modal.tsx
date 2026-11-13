@@ -12,6 +12,7 @@ import { View } from '@actual-app/components/view';
 import { importBudget } from '#budgetfiles/budgetfilesSlice';
 import { Link } from '#components/common/Link';
 import { Modal, ModalCloseButton, ModalHeader } from '#components/common/Modal';
+import { Checkbox } from '#components/forms';
 import { ImportProgress } from '#components/modals/manager/ImportProgress';
 import { useNavigate } from '#hooks/useNavigate';
 import { useDispatch } from '#redux';
@@ -21,9 +22,26 @@ export function ImportYNAB5Modal() {
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const [error, setError] = useState<string | null>(null);
+  const [creditCards, setCreditCards] = useState(true);
 
   function getErrorMessage(error: string): string {
     switch (error) {
+      case 'ynab-card-source':
+        return t(
+          'The YNAB JSON export is incomplete or invalid. No budget was uploaded.',
+        );
+      case 'ynab-card-mapping':
+        return t(
+          'Card payment categories could not be matched to card accounts. Their names must match in the YNAB export.',
+        );
+      case 'ynab-card-precision':
+        return t(
+          'The export contains amounts that cannot be represented exactly in minor units. Nothing was imported.',
+        );
+      case 'ynab-card-reconciliation':
+        return t(
+          'Imported balances, category amounts, or Ready to Assign did not match YNAB. The trial import was discarded; nothing was uploaded.',
+        );
       case 'parse-error':
         return t(
           'Unable to parse file. Please select a JSON file exported from nYNAB.',
@@ -50,7 +68,9 @@ export function ImportYNAB5Modal() {
       setImporting(true);
       setError(null);
       try {
-        await dispatch(importBudget({ filepath: res[0], type: 'ynab5' }));
+        await dispatch(
+          importBudget({ filepath: res[0], type: 'ynab5', creditCards }),
+        ).unwrap();
         void navigate('/budget');
       } catch (err) {
         setError(err.message);
@@ -100,13 +120,32 @@ export function ImportYNAB5Modal() {
                   to do that.
                 </Trans>
               </Paragraph>
+              <label>
+                <Checkbox
+                  checked={creditCards}
+                  disabled={importing}
+                  onChange={event =>
+                    setCreditCards(event.currentTarget.checked)
+                  }
+                />
+                <Trans>Use YNAB-style credit-card payment categories</Trans>
+              </label>
               <Paragraph>
-                <Trans>
-                  Once you have exported your data, select the file and Actual
-                  will import it. Budgets may not match up exactly because
-                  things work slightly differently, but you should be able to
-                  fix up any problems.
-                </Trans>
+                {creditCards ? (
+                  <Trans>
+                    Card accounts and payment allocations are preserved.
+                    Balances and historical categories must reconcile before the
+                    import completes. Review the local budget before uploading
+                    it. Every client must use this fork.
+                  </Trans>
+                ) : (
+                  <Trans>
+                    Once you have exported your data, select the file and Actual
+                    will import it. Budgets may not match up exactly because
+                    things work slightly differently, but you should be able to
+                    fix up any problems.
+                  </Trans>
+                )}
               </Paragraph>
               {!importing && (
                 <View>

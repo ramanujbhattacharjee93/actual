@@ -5,37 +5,39 @@ import type {
   CreditCardBudgetState,
 } from '#shared/credit-card-budget';
 
+import type {
+  CreditCardMonthCategory,
+  CreditCardMonthTransaction,
+} from './credit-card-month-v1';
 import { sumReserveAmounts as sum } from './credit-card-reserves';
 
-export type CreditCardMonthCategory = {
-  id: string;
-  isIncome: boolean;
-  assigned: number;
-  carryover: boolean;
+export type {
+  CreditCardMonthCategory,
+  CreditCardMonthTransaction,
+} from './credit-card-month-v1';
+
+type Spending = {
+  cash: number;
+  credit: { accountId: string; amount: number }[];
 };
 
-export type CreditCardMonthTransaction = {
-  id: string;
-  account: string;
-  category: string | null;
-  amount: number;
-  date: number;
-  is_parent: number;
-  is_child: number;
-  parent_id: string | null;
-  starting_balance_flag: number | null;
-  error: string | null;
-  transfer_id: string | null;
-  transfer_account: string | null;
-  transfer_amount: number | null;
-  transfer_date: number | null;
-  transfer_back: string | null;
-  transfer_offbudget: number | null;
-};
+function compareTransactions(
+  a: CreditCardMonthTransaction,
+  b: CreditCardMonthTransaction,
+) {
+  return (
+    a.date - b.date ||
+    Number(Boolean(b.starting_balance_flag)) -
+      Number(Boolean(a.starting_balance_flag)) ||
+    (b.sort_order ?? 0) - (a.sort_order ?? 0) ||
+    (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+  );
+}
 
 /**
- * Cash envelopes plus card payment reserves, calculated from the beginning of
- * the budget. Credit overspending becomes debt, not next month's cash deficit.
+ * Native card accounting. Positive card balances are cash; only the part of a
+ * purchase financed by debt needs a payment reserve. Transfers remain real
+ * account transfers, never synthetic expenses or balancing transactions.
  */
 export function calculateCreditCardMonth({
   month,
@@ -72,10 +74,16 @@ export function calculateCreditCardMonth({
     toBudget: 0,
     cashOverspent: 0,
     cashBalance: previous?.cashBalance ?? 0,
+    creditAdjustments: 0,
+    autoBuffered: 0,
   };
+  if (buffered < 0) {
+    throw new Error('Held funds cannot be negative.');
+  }
   const paymentCategories = new Set(
     config.cards.map(card => card.paymentCategoryId),
   );
+  const debtCategories = new Set(config.debtCategoryIds ?? []);
   const cards = new Map(
     config.cards.map(card => [
       card.accountId,
@@ -86,131 +94,111 @@ export function calculateCreditCardMonth({
             ?.balance ?? 0,
         fundedSpending: 0,
         payments: 0,
+        interestCharged: 0,
       },
     ]),
   );
   const incomeCategories = new Set<string>();
-  const spending = new Map<
-    string,
-    { cash: number; cards: Map<string, number> }
-  >();
-
-  for (const transaction of transactions) {
-    if (transaction.is_parent) {
-      const children = transactions.filter(
-        child => child.parent_id === transaction.id && child.is_child,
-      );
-      if (
-        children.length === 0 ||
-        sum(...children.map(child => child.amount)) !== transaction.amount ||
-        children.some(
-          child =>
-            child.account !== transaction.account ||
-            child.date !== transaction.date,
-        )
-      ) {
-        issues.push({ code: 'invalid-split', transactionId: transaction.id });
-      }
-    } else if (
-      transaction.is_child &&
-      !transactions.some(
-        parent => parent.id === transaction.parent_id && parent.is_parent,
-      )
-    ) {
-      issues.push({ code: 'invalid-split', transactionId: transaction.id });
-    }
-  }
+  const spending = new Map<string, Spending>();
   for (const category of categories) {
-    const assigned = sum(category.assigned);
-    if (category.carryover) {
-      issues.push({
-        code: 'unsupported-carryover',
-        categoryId: category.id,
-      });
-    }
+    sum(category.assigned);
     if (category.isIncome) {
       incomeCategories.add(category.id);
-    } else {
-      result.totalBudgeted = sum(result.totalBudgeted, -assigned);
+    } else if (category.carryover) {
+      issues.push({ code: 'unsupported-carryover', categoryId: category.id });
+    }
+    if (debtCategories.has(category.id) && category.assigned !== 0) {
+      issues.push({ code: 'invalid-configuration', categoryId: category.id });
     }
     result.categories[category.id] = {
-      assigned,
+      assigned: category.assigned,
       activity: 0,
-      available: category.isIncome
-        ? 0
-        : sum(
-            assigned,
-            Math.max(0, previous?.categories[category.id]?.available ?? 0),
-          ),
+      available:
+        category.isIncome || debtCategories.has(category.id)
+          ? 0
+          : sum(
+              category.assigned,
+              Math.max(0, previous?.categories[category.id]?.available ?? 0),
+            ),
       creditOverspent: 0,
       cashOverspent: 0,
     };
-    spending.set(category.id, { cash: 0, cards: new Map() });
+    if (!category.isIncome) {
+      result.totalBudgeted = sum(result.totalBudgeted, -category.assigned);
+    }
+    spending.set(category.id, { cash: 0, credit: [] });
   }
 
+  const children = new Map<string, CreditCardMonthTransaction[]>();
+  const byId = new Map(
+    transactions.map(transaction => [transaction.id, transaction]),
+  );
   for (const transaction of transactions) {
     sum(transaction.amount);
     if (transaction.error) {
       issues.push({ code: 'invalid-split', transactionId: transaction.id });
     }
-    const card = cards.get(transaction.account);
-    if (!card && !transaction.is_child) {
-      result.cashBalance = sum(result.cashBalance, transaction.amount);
-    }
-    if (card && !transaction.is_child) {
-      card.balance = sum(card.balance, transaction.amount);
-      if (card.balance > 0) {
-        issues.push({
-          code: 'positive-card-balance',
-          accountId: card.accountId,
-          transactionId: transaction.id,
-        });
+    if (transaction.is_child) {
+      const parent = transaction.parent_id
+        ? byId.get(transaction.parent_id)
+        : undefined;
+      if (
+        !parent?.is_parent ||
+        transaction.is_parent ||
+        parent.date !== transaction.date ||
+        parent.account !== transaction.account
+      ) {
+        issues.push({ code: 'invalid-split', transactionId: transaction.id });
+      } else {
+        const list = children.get(parent.id) ?? [];
+        list.push(transaction);
+        children.set(parent.id, list);
       }
     }
-    if (transaction.is_parent) {
-      continue;
+  }
+
+  function process(transaction: CreditCardMonthTransaction) {
+    const card = cards.get(transaction.account);
+    const before = card?.balance ?? 0;
+    const after = card ? sum(before, transaction.amount) : 0;
+    const cashChange = card
+      ? sum(Math.max(0, after), -Math.max(0, before))
+      : transaction.amount;
+    result.cashBalance = sum(result.cashBalance, cashChange);
+    if (card) {
+      card.balance = after;
     }
     if (transaction.transfer_id) {
-      const otherCard = transaction.transfer_account
-        ? cards.get(transaction.transfer_account)
-        : undefined;
-      if (card || otherCard) {
-        if (
-          transaction.is_child ||
-          transaction.transfer_offbudget !== 0 ||
-          transaction.transfer_amount !== -transaction.amount ||
-          transaction.transfer_back !== transaction.id ||
-          transaction.transfer_date !== transaction.date ||
-          (card && (otherCard || transaction.amount < 0))
-        ) {
-          issues.push({
-            code: 'unsupported-transfer',
-            transactionId: transaction.id,
-          });
-        } else if (card) {
-          card.payments = sum(card.payments, transaction.amount);
-        }
-        continue;
-      }
-      if (transaction.transfer_offbudget === 0) {
-        if (
-          transaction.transfer_amount !== -transaction.amount ||
-          transaction.transfer_back !== transaction.id ||
-          transaction.transfer_date !== transaction.date
-        ) {
-          issues.push({
-            code: 'unsupported-transfer',
-            transactionId: transaction.id,
-          });
-        }
-        continue;
-      }
-      if (transaction.transfer_offbudget === null) {
+      if (
+        transaction.transfer_account === null ||
+        transaction.transfer_offbudget === null ||
+        transaction.transfer_date === null ||
+        transaction.transfer_amount !== -transaction.amount ||
+        transaction.transfer_back !== transaction.id ||
+        transaction.transfer_is_parent
+      ) {
         issues.push({
           code: 'unsupported-transfer',
           transactionId: transaction.id,
         });
-        continue;
+        return;
+      }
+      if (transaction.transfer_offbudget === 0) {
+        const otherCard = cards.get(transaction.transfer_account);
+        // A payment consumes reserves when cash leaves the paying account,
+        // even if the receiving bank posts its reciprocal row on another date.
+        if (!card && otherCard && transaction.amount < 0) {
+          otherCard.payments = sum(otherCard.payments, -transaction.amount);
+        } else {
+          // Cash advances, positive-balance movements and transfer timing
+          // affect assignable cash. Card-to-card debt transfers do not move
+          // payment reserves: those allocations remain the user's choice.
+          result.creditAdjustments = sum(
+            result.creditAdjustments ?? 0,
+            cashChange,
+          );
+        }
+        return;
       }
     }
     const category = transaction.category
@@ -221,7 +209,7 @@ export function calculateCreditCardMonth({
         code: 'uncategorized-spending',
         transactionId: transaction.id,
       });
-      continue;
+      return;
     }
     if (paymentCategories.has(transaction.category)) {
       issues.push({
@@ -229,88 +217,100 @@ export function calculateCreditCardMonth({
         categoryId: transaction.category,
         transactionId: transaction.id,
       });
-      continue;
+      return;
     }
     if (incomeCategories.has(transaction.category)) {
-      // Starting debt and statement credits change debt, not spendable cash.
+      category.activity = sum(category.activity, cashChange);
+      result.income = sum(result.income, cashChange);
+      return;
+    }
+    if (debtCategories.has(transaction.category)) {
       if (!card) {
-        category.activity = sum(category.activity, transaction.amount);
-        result.income = sum(result.income, transaction.amount);
-      } else if (transaction.amount < 0 && !transaction.starting_balance_flag) {
-        issues.push({
-          code: 'uncategorized-spending',
-          transactionId: transaction.id,
-        });
+        issues.push({ code: 'invalid-mapping', transactionId: transaction.id });
+      } else {
+        card.interestCharged = sum(card.interestCharged, -transaction.amount);
+        result.creditAdjustments = sum(
+          result.creditAdjustments ?? 0,
+          cashChange,
+        );
       }
-      continue;
+      return;
     }
     if (transaction.starting_balance_flag) {
       issues.push({
         code: 'uncategorized-spending',
         transactionId: transaction.id,
       });
-      continue;
+      return;
     }
     category.activity = sum(category.activity, transaction.amount);
-    const categorySpending = spending.get(transaction.category);
-    if (!categorySpending) {
-      throw new Error('Missing credit-card spending category.');
+    const amounts = spending.get(transaction.category);
+    if (!amounts) {
+      throw new Error('Missing spending category.');
     }
-    if (card) {
-      categorySpending.cards.set(
-        card.accountId,
-        sum(
-          categorySpending.cards.get(card.accountId) ?? 0,
-          -transaction.amount,
-        ),
-      );
+    if (!card) {
+      amounts.cash = sum(amounts.cash, -transaction.amount);
     } else {
-      categorySpending.cash = sum(categorySpending.cash, -transaction.amount);
+      const creditAmount = sum(-transaction.amount, cashChange);
+      amounts.cash = sum(amounts.cash, -cashChange);
+      if (creditAmount !== 0) {
+        amounts.credit.push({
+          accountId: card.accountId,
+          amount: creditAmount,
+        });
+      }
+    }
+  }
+
+  for (const transaction of transactions
+    .filter(row => !row.is_child)
+    .sort(compareTransactions)) {
+    if (transaction.is_parent) {
+      const leaves = children.get(transaction.id) ?? [];
+      if (
+        leaves.length === 0 ||
+        sum(...leaves.map(row => row.amount)) !== transaction.amount
+      ) {
+        issues.push({ code: 'invalid-split', transactionId: transaction.id });
+        continue;
+      }
+      for (const leaf of leaves.sort(compareTransactions)) {
+        process(leaf);
+      }
+    } else {
+      process(transaction);
     }
   }
 
   for (const category of categories) {
-    if (category.isIncome || paymentCategories.has(category.id)) {
+    if (
+      category.isIncome ||
+      paymentCategories.has(category.id) ||
+      debtCategories.has(category.id)
+    ) {
       continue;
     }
-    const amounts = spending.get(category.id);
     const envelope = result.categories[category.id];
-    if (!amounts || !envelope) {
-      throw new Error('Missing credit-card envelope.');
+    const amounts = spending.get(category.id);
+    if (!envelope || !amounts) {
+      throw new Error('Missing envelope.');
     }
-    // Refunds reverse payment reserves even if the purchase was in a prior
-    // month. Negative payment reserves must remain visible, not be clamped.
-    const refunds = sum(
-      ...[...amounts.cards.values()].filter(amount => amount < 0),
+    const beforeActivity = envelope.available;
+    const funded = fundCreditSpending(
+      amounts,
+      sum(beforeActivity, -amounts.cash),
     );
-    const purchases = [...amounts.cards].filter(([, amount]) => amount > 0);
-    const totalPurchases = sum(...purchases.map(([, amount]) => amount));
-    const fundsForCards = Math.max(
-      0,
-      sum(envelope.available, -amounts.cash, -refunds),
-    );
-    if (totalPurchases > fundsForCards && purchases.length > 1) {
-      issues.push({
-        code: 'ambiguous-card-funding',
-        categoryId: category.id,
-      });
-    } else {
-      for (const [accountId, amount] of amounts.cards) {
-        const card = cards.get(accountId);
-        if (card) {
-          card.fundedSpending = sum(
-            card.fundedSpending,
-            amount < 0 ? amount : Math.min(amount, fundsForCards),
-          );
-        }
+    for (const [accountId, amount] of funded) {
+      const card = cards.get(accountId);
+      if (card) {
+        card.fundedSpending = sum(card.fundedSpending, amount);
       }
     }
-    const availableBeforeActivity = envelope.available;
-    envelope.available = sum(envelope.available, envelope.activity);
+    envelope.available = sum(beforeActivity, envelope.activity);
     const overspent = Math.max(0, -envelope.available);
     envelope.cashOverspent = Math.min(
       overspent,
-      Math.max(0, sum(amounts.cash, -availableBeforeActivity)),
+      Math.max(0, sum(amounts.cash, -beforeActivity)),
     );
     envelope.creditOverspent = sum(overspent, -envelope.cashOverspent);
     result.cashOverspent = sum(result.cashOverspent, envelope.cashOverspent);
@@ -339,25 +339,32 @@ export function calculateCreditCardMonth({
       excessReserve: Math.max(0, sum(envelope.available, -debt)),
     });
   }
-
   if (issues.length > 0) {
     return { status: 'blocked', month, issues };
   }
   for (const category of categories) {
+    const value = result.categories[category.id];
     if (!category.isIncome) {
+      result.totalAvailable = sum(result.totalAvailable, value.available);
       if (!paymentCategories.has(category.id)) {
-        result.totalSpent = sum(
-          result.totalSpent,
-          result.categories[category.id].activity,
-        );
+        result.totalSpent = sum(result.totalSpent, value.activity);
       }
-      result.totalAvailable = sum(
-        result.totalAvailable,
-        result.categories[category.id].available,
-      );
     }
   }
-  result.availableFunds = sum(result.income, result.fromLastMonth);
+  result.autoBuffered = Math.max(
+    0,
+    sum(
+      ...categories
+        .filter(category => category.isIncome && category.carryover)
+        .map(category => result.categories[category.id].activity),
+    ),
+  );
+  result.buffered = buffered || result.autoBuffered;
+  result.availableFunds = sum(
+    result.income,
+    result.fromLastMonth,
+    result.creditAdjustments ?? 0,
+  );
   result.toBudget = sum(
     result.availableFunds,
     result.lastMonthOverspent,
@@ -372,12 +379,61 @@ export function calculateCreditCardMonth({
       category => category.creditOverspent,
     ),
   );
-  if (accountedCash !== result.cashBalance) {
-    return {
-      status: 'blocked',
-      month,
-      issues: [{ code: 'unbalanced-cash' }],
-    };
+  return accountedCash === result.cashBalance
+    ? result
+    : { status: 'blocked', month, issues: [{ code: 'unbalanced-cash' }] };
+}
+
+function fundCreditSpending(
+  spending: Spending,
+  startingFunds: number,
+): Map<string, number> {
+  let funds = startingFunds;
+  const funded = new Map<string, number>();
+  const purchases: { accountId: string; amount: number; funded: number }[] = [];
+  function change(accountId: string, amount: number) {
+    funded.set(accountId, sum(funded.get(accountId) ?? 0, amount));
   }
-  return result;
+  function allocate() {
+    for (const purchase of purchases) {
+      const amount = Math.min(
+        Math.max(0, funds),
+        sum(purchase.amount, -purchase.funded),
+      );
+      purchase.funded = sum(purchase.funded, amount);
+      funds = sum(funds, -amount);
+      change(purchase.accountId, amount);
+    }
+  }
+  for (const event of spending.credit) {
+    if (event.amount > 0) {
+      purchases.push({ ...event, funded: 0 });
+    } else {
+      let refund = -event.amount;
+      const matching = purchases
+        .filter(purchase => purchase.accountId === event.accountId)
+        .reverse();
+      // Refund unfunded purchases first, then return funded cash to the
+      // spending category. Any remainder reverses a prior month's reserve.
+      for (const purchase of matching) {
+        const amount = Math.min(refund, sum(purchase.amount, -purchase.funded));
+        purchase.amount = sum(purchase.amount, -amount);
+        refund = sum(refund, -amount);
+      }
+      for (const purchase of matching) {
+        const amount = Math.min(refund, purchase.funded);
+        purchase.amount = sum(purchase.amount, -amount);
+        purchase.funded = sum(purchase.funded, -amount);
+        refund = sum(refund, -amount);
+        funds = sum(funds, amount);
+        change(event.accountId, -amount);
+      }
+      funds = sum(funds, refund);
+      change(event.accountId, -refund);
+    }
+    // Cash has priority. Remaining funds cover credit purchases in stable
+    // transaction order, including several cards sharing an underfunded category.
+    allocate();
+  }
+  return funded;
 }

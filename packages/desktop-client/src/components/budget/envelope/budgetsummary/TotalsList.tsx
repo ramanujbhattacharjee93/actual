@@ -7,11 +7,13 @@ import { Block } from '@actual-app/components/block';
 import { styles } from '@actual-app/components/styles';
 import { Tooltip } from '@actual-app/components/tooltip';
 import { View } from '@actual-app/components/view';
+import { CREDIT_CARD_BUDGET_PREF } from '@actual-app/core/shared/credit-card-budget';
 
 import { EnvelopeCellValue } from '#components/budget/envelope/EnvelopeBudgetComponents';
 import { CellValueText } from '#components/spreadsheet/CellValue';
 import { useFormat } from '#hooks/useFormat';
 import type { FormatType } from '#hooks/useFormat';
+import { useSyncedPref } from '#hooks/useSyncedPref';
 import { envelopeBudget } from '#spreadsheet/bindings';
 
 /**
@@ -48,6 +50,7 @@ type TotalsListProps = {
 
 export function TotalsList({ prevMonthName, style }: TotalsListProps) {
   const format = useFormat();
+  const [cardMode] = useSyncedPref(CREDIT_CARD_BUDGET_PREF);
   const signedFormatter = makeSignedFormatter(format);
   const invertedSignedFormatter = makeSignedFormatter(format, true);
   return (
@@ -89,6 +92,17 @@ export function TotalsList({ prevMonthName, style }: TotalsListProps) {
                   />
                 }
               />
+              {cardMode && (
+                <AlignedText
+                  left={<Trans>Card balances and transfers:</Trans>}
+                  right={
+                    <EnvelopeCellValue
+                      binding={envelopeBudget.creditAdjustments}
+                      type="financial"
+                    />
+                  }
+                />
+              )}
             </>
           }
           placement="bottom end"

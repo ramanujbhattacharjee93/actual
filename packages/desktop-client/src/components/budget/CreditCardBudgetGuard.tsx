@@ -9,7 +9,10 @@ import { theme } from '@actual-app/components/theme';
 import { spacing } from '@actual-app/components/tokens';
 import { View } from '@actual-app/components/view';
 import { send } from '@actual-app/core/platform/client/connection';
-import { CREDIT_CARD_BUDGET_PREF } from '@actual-app/core/shared/credit-card-budget';
+import {
+  CREDIT_CARD_BUDGET_PREF,
+  parseCreditCardBudgetConfig,
+} from '@actual-app/core/shared/credit-card-budget';
 import type {
   CreditCardBudgetIssue,
   CreditCardBudgetReady,
@@ -79,6 +82,13 @@ function MonthGuard({
   children: (state: CreditCardBudgetReady) => ReactNode;
 }) {
   const { t } = useTranslation();
+  const [mode] = useSyncedPref(CREDIT_CARD_BUDGET_PREF);
+  let native = false;
+  try {
+    native = Boolean(mode && parseCreditCardBudgetConfig(mode).version === 2);
+  } catch {
+    // The worker reports the incompatible configuration.
+  }
   const revision = useSheetValue<'envelope-budget', 'credit-card-state'>(
     'credit-card-state',
   );
@@ -104,9 +114,11 @@ function MonthGuard({
     'ambiguous-card-funding': t(
       'Fully fund a category shared by multiple cards; funding priority is not defined yet.',
     ),
-    'unsupported-transfer': t(
-      'Review card transfers. Cash advances, card-to-card transfers, split payments, and mismatched payment pairs are not supported yet.',
-    ),
+    'unsupported-transfer': native
+      ? t('Fix an incomplete or mismatched transfer pair.')
+      : t(
+          'Review card transfers. Cash advances, card-to-card transfers, split payments, and mismatched payment pairs are not supported yet.',
+        ),
     'uncategorized-spending': t(
       'Categorize transactions before using these totals.',
     ),
@@ -242,6 +254,14 @@ function AllocationEditor({
 
 function PaymentCategories({ state }: { state: CreditCardBudgetReady }) {
   const { data: accounts = [] } = useAccounts();
+  const { data: categories } = useCategories();
+  const [value] = useSyncedPref(CREDIT_CARD_BUDGET_PREF);
+  let legacy = true;
+  try {
+    legacy = !value || parseCreditCardBudgetConfig(value).version === 1;
+  } catch {
+    // Invalid configurations are hidden by MonthGuard.
+  }
   const format = useFormat();
   return (
     <View
@@ -249,13 +269,21 @@ function PaymentCategories({ state }: { state: CreditCardBudgetReady }) {
       style={{ padding: spacing.sm, gap: spacing.xs, flexShrink: 0 }}
     >
       <Text>
-        <Trans>Experimental credit-card payments: {state.month}</Trans>
+        <Trans>Credit-card payments: {state.month}</Trans>
       </Text>
       <Text>
-        <Trans>
-          Demo only. Assign extra debt payments in the matching payment category
-          below. These amounts are not authorization to pay.
-        </Trans>
+        {legacy ? (
+          <Trans>
+            Demo only. Assign extra debt payments in the matching payment
+            category below. These amounts are not authorization to pay.
+          </Trans>
+        ) : (
+          <Trans>
+            Funded purchases reserve payment money automatically. Assign
+            directly to payment categories for opening debt and additional
+            repayments.
+          </Trans>
+        )}
       </Text>
       {state.cards.map(card => (
         <View key={card.accountId} style={{ gap: spacing.xs }}>
@@ -295,9 +323,51 @@ function PaymentCategories({ state }: { state: CreditCardBudgetReady }) {
                 </FinancialText>
               </Text>
             )}
+            {(card.interestCharged ?? 0) > 0 && (
+              <Text>
+                <Trans>Debt-only interest</Trans>{' '}
+                <FinancialText>
+                  {format(card.interestCharged, 'financial')}
+                </FinancialText>
+              </Text>
+            )}
           </View>
         </View>
       ))}
+      {Object.entries(state.categories)
+        .filter(
+          ([, category]) =>
+            category.cashOverspent > 0 || category.creditOverspent > 0,
+        )
+        .map(([id, category]) => (
+          <Text key={id}>
+            {categories?.list.find(item => item.id === id)?.name}{' '}
+            {category.cashOverspent > 0 && (
+              <>
+                <Trans>Cash overspending</Trans>{' '}
+                <FinancialText>
+                  {format(category.cashOverspent, 'financial')}
+                </FinancialText>{' '}
+              </>
+            )}
+            {category.creditOverspent > 0 && (
+              <>
+                <Trans>Credit overspending</Trans>{' '}
+                <FinancialText>
+                  {format(category.creditOverspent, 'financial')}
+                </FinancialText>
+              </>
+            )}
+          </Text>
+        ))}
+      {(state.creditAdjustments ?? 0) !== 0 && (
+        <Text>
+          <Trans>Cash from card balances and transfers</Trans>{' '}
+          <FinancialText>
+            {format(state.creditAdjustments, 'financial-with-sign')}
+          </FinancialText>
+        </Text>
+      )}
     </View>
   );
 }

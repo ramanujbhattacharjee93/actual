@@ -80,6 +80,11 @@ async function setup({ enable = true } = {}) {
       paymentGroupName: 'Credit Card Payments',
       forkOnlyAcknowledged: true,
     });
+    config.version = 1;
+    await db.update('preferences', {
+      id: CREDIT_CARD_BUDGET_PREF,
+      value: JSON.stringify(config),
+    });
   }
 }
 
@@ -594,7 +599,7 @@ describe('credit-card enablement boundary', () => {
   it('rejects enablement for an existing budget without writing mappings or categories', async () => {
     await transaction();
     const categories = await db.all('SELECT * FROM categories ORDER BY id');
-    await expect(enableCreditCardBudget(request)).rejects.toThrow('new demo');
+    await expect(enableCreditCardBudget(request)).rejects.toThrow('new budget');
     expect(await db.all('SELECT * FROM categories ORDER BY id')).toEqual(
       categories,
     );

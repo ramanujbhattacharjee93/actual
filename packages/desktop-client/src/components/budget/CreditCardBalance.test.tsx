@@ -88,8 +88,21 @@ it('keeps cash overspending red when cash and credit both exceed funding', () =>
 it('shows an underfunded payment without requiring a separate goal', () => {
   show({ balance: 5000, debt: 10000, isPayment: true });
   expect(screen.getByTitle('Card payment is underfunded')).toBeInTheDocument();
+  expect(
+    screen.getByRole('img', { name: 'Card payment is underfunded' }),
+  ).toBeInTheDocument();
   expect(screen.getByTestId('__global!leftover-food')).toHaveStyle({
     color: theme.templateNumberUnderFunded,
+  });
+});
+
+it('identifies payment overspending instead of labeling it ordinary cash spending', () => {
+  show({ balance: -1000, cash: 1000, debt: 10000, isPayment: true });
+  expect(
+    screen.getByRole('img', { name: 'Payment overspending' }),
+  ).toBeInTheDocument();
+  expect(screen.getByTestId('__global!leftover-food')).toHaveStyle({
+    color: theme.budgetNumberNegative,
   });
 });
 

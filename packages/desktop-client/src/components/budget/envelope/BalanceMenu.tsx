@@ -4,11 +4,13 @@ import { useTranslation } from 'react-i18next';
 
 import { Menu } from '@actual-app/components/menu';
 import type { MenuItemObject } from '@actual-app/components/menu';
+import { CREDIT_CARD_BUDGET_PREF } from '@actual-app/core/shared/credit-card-budget';
 import type { IntegerAmount } from '@actual-app/core/shared/util';
 
 import { getGoalDifference } from '#components/budget/util';
 import { useFeatureFlag } from '#hooks/useFeatureFlag';
 import { useFormat } from '#hooks/useFormat';
+import { useSyncedPref } from '#hooks/useSyncedPref';
 import { envelopeBudget } from '#spreadsheet/bindings';
 
 import { useEnvelopeSheetValue } from './EnvelopeBudgetComponents';
@@ -31,6 +33,7 @@ export function useBalanceMenu({
   const { t } = useTranslation();
   const isGoalTemplatesEnabled = useFeatureFlag('goalTemplatesEnabled');
   const format = useFormat();
+  const [creditCardMode] = useSyncedPref(CREDIT_CARD_BUDGET_PREF);
 
   const carryover = useEnvelopeSheetValue(
     envelopeBudget.catCarryover(categoryId),
@@ -98,12 +101,16 @@ export function useBalanceMenu({
           },
         ]
       : []),
-    {
-      name: 'carryover',
-      text: carryover
-        ? t('Remove overspending rollover')
-        : t('Rollover overspending'),
-    },
+    ...(!creditCardMode
+      ? [
+          {
+            name: 'carryover',
+            text: carryover
+              ? t('Remove overspending rollover')
+              : t('Rollover overspending'),
+          },
+        ]
+      : []),
   ];
 
   return { items, onMenuSelect };

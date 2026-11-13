@@ -2,6 +2,7 @@ import React, { useCallback, useRef, useState } from 'react';
 
 import { theme } from '@actual-app/components/theme';
 
+import { CreditCardDetails } from '#components/budget/CreditCardDetails';
 import { GoalStatus } from '#components/budget/GoalStatus';
 import { useFormat } from '#hooks/useFormat';
 import { envelopeBudget } from '#spreadsheet/bindings';
@@ -47,16 +48,18 @@ export function BalanceMovementMenu({
         <BalanceMenu
           categoryId={categoryId}
           header={
-            <GoalStatus
-              balance={envelopeBudget.catBalance(categoryId)}
-              goal={envelopeBudget.catGoal(categoryId)}
-              budgeted={envelopeBudget.catBudgeted(categoryId)}
-              longGoal={envelopeBudget.catLongGoal(categoryId)}
-              style={{
-                padding: 10,
-                borderBottom: '1px solid ' + theme.menuBorder,
-              }}
-            />
+            <CreditCardDetails categoryId={categoryId}>
+              <GoalStatus
+                balance={envelopeBudget.catBalance(categoryId)}
+                goal={envelopeBudget.catGoal(categoryId)}
+                budgeted={envelopeBudget.catBudgeted(categoryId)}
+                longGoal={envelopeBudget.catLongGoal(categoryId)}
+                style={{
+                  padding: 10,
+                  borderBottom: '1px solid ' + theme.menuBorder,
+                }}
+              />
+            </CreditCardDetails>
           }
           onCarryover={carryover => {
             onBudgetAction(month, 'carryover', {

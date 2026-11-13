@@ -1,5 +1,6 @@
 import { Trans } from 'react-i18next';
 
+import { CreditCardDetails } from '#components/budget/CreditCardDetails';
 import { useBalanceMenu } from '#components/budget/envelope/BalanceMenu';
 import { MobileSheet } from '#components/mobile/MobileSheet';
 import { MobileSheetBalanceHeader } from '#components/mobile/MobileSheetBalanceHeader';
@@ -36,14 +37,16 @@ export function EnvelopeBalanceMenuModal({
 
   return (
     <MobileSheet name="envelope-balance-menu" title={category.name}>
-      <MobileSheetBalanceHeader
-        label={<Trans>Balance</Trans>}
-        carryover={envelopeBudget.catCarryover(categoryId)}
-        balance={envelopeBudget.catBalance(categoryId)}
-        goal={envelopeBudget.catGoal(categoryId)}
-        budgeted={envelopeBudget.catBudgeted(categoryId)}
-        longGoal={envelopeBudget.catLongGoal(categoryId)}
-      />
+      <CreditCardDetails categoryId={categoryId}>
+        <MobileSheetBalanceHeader
+          label={<Trans>Balance</Trans>}
+          carryover={envelopeBudget.catCarryover(categoryId)}
+          balance={envelopeBudget.catBalance(categoryId)}
+          goal={envelopeBudget.catGoal(categoryId)}
+          budgeted={envelopeBudget.catBudgeted(categoryId)}
+          longGoal={envelopeBudget.catLongGoal(categoryId)}
+        />
+      </CreditCardDetails>
       <MobileSheetSection>
         <MobileSheetMenuRows items={items} onSelect={onMenuSelect} />
       </MobileSheetSection>

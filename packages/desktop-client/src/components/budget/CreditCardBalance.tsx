@@ -1,6 +1,11 @@
 import type { ComponentProps } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import {
+  SvgExclamationOutline,
+  SvgInformationOutline,
+} from '@actual-app/components/icons/v1';
+import { SvgCheckCircle1 } from '@actual-app/components/icons/v2';
 import { theme } from '@actual-app/components/theme';
 import { View } from '@actual-app/components/view';
 import {
@@ -62,7 +67,9 @@ function NativeBalance({
     ) ?? 0;
   const status =
     cash > 0
-      ? t('Cash overspending')
+      ? isPayment
+        ? t('Payment overspending')
+        : t('Cash overspending')
       : credit > 0
         ? t('Credit overspending')
         : isPayment && balance < debt
@@ -72,8 +79,41 @@ function NativeBalance({
             : isPayment
               ? t('Card payment is fully funded')
               : undefined;
+  const warning = cash > 0 || credit > 0 || (isPayment && balance < debt);
+  const Icon = warning
+    ? SvgExclamationOutline
+    : isPayment && balance > debt
+      ? SvgInformationOutline
+      : SvgCheckCircle1;
   return (
-    <View title={status} style={{ alignItems: 'flex-end' }}>
+    <View
+      title={status}
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'flex-end',
+        gap: 4,
+        minWidth: 0,
+        maxWidth: '100%',
+      }}
+    >
+      {status && (
+        <Icon
+          role="img"
+          aria-label={status}
+          width={12}
+          height={12}
+          style={{
+            flexShrink: 0,
+            color:
+              cash > 0
+                ? theme.budgetNumberNegative
+                : warning
+                  ? theme.templateNumberUnderFunded
+                  : theme.pageTextSubdued,
+          }}
+        />
+      )}
       <BalanceWithCarryover
         {...props}
         amountStyle={() => ({

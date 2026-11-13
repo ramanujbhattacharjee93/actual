@@ -29,6 +29,13 @@ rebudgeting, undo/redo, cache resets, and sync recompute history. Desktop and
 mobile distinguish cash overspending, credit overspending, payment shortfalls,
 uncovered debt, and excess reserves.
 
+Payment amounts appear in the normal **Credit Card Payments** budget rows.
+Click or tap a balance for its funding breakdown and the existing money-movement
+actions. Status icons distinguish underfunding, overspending, and excess reserves
+without adding a separate summary above the budget. On mobile, details open in
+the standard balance bottom sheet. Negative-balance rollover is unavailable in
+card mode because it conflicts with the native accounting rules.
+
 #### Importing YNAB
 
 Use the existing **nYNAB JSON import** with **Use YNAB-style credit-card payment

@@ -20,8 +20,6 @@ import type {
 import * as monthUtils from '@actual-app/core/shared/months';
 import { useQuery } from '@tanstack/react-query';
 
-import { FinancialText } from '#components/FinancialText';
-import { useAccounts } from '#hooks/useAccounts';
 import { useCategories } from '#hooks/useCategories';
 import { useFormat } from '#hooks/useFormat';
 import { SheetNameProvider, useSheetName } from '#hooks/useSheetName';
@@ -31,12 +29,10 @@ import { useSyncedPref } from '#hooks/useSyncedPref';
 export function CreditCardBudgetGuard({
   month,
   numMonths = 1,
-  showPayments = true,
   children,
 }: {
   month: string;
   numMonths?: number;
-  showPayments?: boolean;
   children: ReactNode;
 }) {
   const [config] = useSyncedPref(CREDIT_CARD_BUDGET_PREF);
@@ -50,18 +46,14 @@ export function CreditCardBudgetGuard({
   return (
     <SheetNameProvider name={monthUtils.sheetForMonth(month)}>
       <MonthGuard month={month}>
-        {state => {
+        {() => {
           const content = (
-            <SheetNameProvider name={parentSheet}>
-              {showPayments && <PaymentCategories state={state} />}
-              {children}
-            </SheetNameProvider>
+            <SheetNameProvider name={parentSheet}>{children}</SheetNameProvider>
           );
           return numMonths > 1 ? (
             <CreditCardBudgetGuard
               month={monthUtils.nextMonth(month)}
               numMonths={numMonths - 1}
-              showPayments={false}
             >
               {content}
             </CreditCardBudgetGuard>
@@ -246,126 +238,6 @@ function AllocationEditor({
       {failed && (
         <Text>
           <Trans>Could not update the allocation.</Trans>
-        </Text>
-      )}
-    </View>
-  );
-}
-
-function PaymentCategories({ state }: { state: CreditCardBudgetReady }) {
-  const { data: accounts = [] } = useAccounts();
-  const { data: categories } = useCategories();
-  const [value] = useSyncedPref(CREDIT_CARD_BUDGET_PREF);
-  let legacy = true;
-  try {
-    legacy = !value || parseCreditCardBudgetConfig(value).version === 1;
-  } catch {
-    // Invalid configurations are hidden by MonthGuard.
-  }
-  const format = useFormat();
-  return (
-    <View
-      data-testid="credit-card-payments"
-      style={{ padding: spacing.sm, gap: spacing.xs, flexShrink: 0 }}
-    >
-      <Text>
-        <Trans>Credit-card payments: {state.month}</Trans>
-      </Text>
-      <Text>
-        {legacy ? (
-          <Trans>
-            Demo only. Assign extra debt payments in the matching payment
-            category below. These amounts are not authorization to pay.
-          </Trans>
-        ) : (
-          <Trans>
-            Funded purchases reserve payment money automatically. Assign
-            directly to payment categories for opening debt and additional
-            repayments.
-          </Trans>
-        )}
-      </Text>
-      {state.cards.map(card => (
-        <View key={card.accountId} style={{ gap: spacing.xs }}>
-          <Text style={{ fontWeight: 600 }}>
-            {accounts.find(account => account.id === card.accountId)?.name}
-          </Text>
-          <View
-            style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md }}
-          >
-            <Text>
-              <Trans>Available to pay</Trans>{' '}
-              <FinancialText>
-                {format(card.paymentAvailable, 'financial')}
-              </FinancialText>
-            </Text>
-            {card.unfundedDebt > 0 && (
-              <Text>
-                <Trans>Debt not covered</Trans>{' '}
-                <FinancialText>
-                  {format(card.unfundedDebt, 'financial')}
-                </FinancialText>
-              </Text>
-            )}
-            {card.paymentShortfall > 0 && (
-              <Text style={{ color: theme.errorText }}>
-                <Trans>Payment overspending</Trans>{' '}
-                <FinancialText>
-                  {format(card.paymentShortfall, 'financial')}
-                </FinancialText>
-              </Text>
-            )}
-            {card.excessReserve > 0 && (
-              <Text>
-                <Trans>Excess reserve</Trans>{' '}
-                <FinancialText>
-                  {format(card.excessReserve, 'financial')}
-                </FinancialText>
-              </Text>
-            )}
-            {(card.interestCharged ?? 0) > 0 && (
-              <Text>
-                <Trans>Debt-only interest</Trans>{' '}
-                <FinancialText>
-                  {format(card.interestCharged, 'financial')}
-                </FinancialText>
-              </Text>
-            )}
-          </View>
-        </View>
-      ))}
-      {Object.entries(state.categories)
-        .filter(
-          ([, category]) =>
-            category.cashOverspent > 0 || category.creditOverspent > 0,
-        )
-        .map(([id, category]) => (
-          <Text key={id}>
-            {categories?.list.find(item => item.id === id)?.name}{' '}
-            {category.cashOverspent > 0 && (
-              <>
-                <Trans>Cash overspending</Trans>{' '}
-                <FinancialText>
-                  {format(category.cashOverspent, 'financial')}
-                </FinancialText>{' '}
-              </>
-            )}
-            {category.creditOverspent > 0 && (
-              <>
-                <Trans>Credit overspending</Trans>{' '}
-                <FinancialText>
-                  {format(category.creditOverspent, 'financial')}
-                </FinancialText>
-              </>
-            )}
-          </Text>
-        ))}
-      {(state.creditAdjustments ?? 0) !== 0 && (
-        <Text>
-          <Trans>Cash from card balances and transfers</Trans>{' '}
-          <FinancialText>
-            {format(state.creditAdjustments, 'financial-with-sign')}
-          </FinancialText>
         </Text>
       )}
     </View>

@@ -91,13 +91,13 @@ describe('credit-card budget guard', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('shows reserves separately from uncovered debt and renders the editable budget', async () => {
+  it('renders the editable budget without a separate card summary panel', async () => {
     mount();
-    const panel = await screen.findByTestId('credit-card-payments');
-    expect(panel).toHaveTextContent('Available to pay 60.00');
-    expect(panel).toHaveTextContent('Debt not covered 40.00');
-    expect(await screen.findByText('Test card')).toBeInTheDocument();
-    expect(screen.getByText('Budget table')).toBeInTheDocument();
+    expect(await screen.findByText('Budget table')).toBeInTheDocument();
+    expect(
+      screen.queryByTestId('credit-card-payments'),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText('Test card')).not.toBeInTheDocument();
   });
 
   it('hides all calculated amounts and the budget when an earlier month is blocked', async () => {
@@ -121,7 +121,7 @@ describe('credit-card budget guard', () => {
 
   it('does not leave stale payment amounts visible while a recalculation is loading', async () => {
     const view = mount();
-    await screen.findByTestId('credit-card-payments');
+    await screen.findByText('Budget table');
     let finish: ((state: CreditCardBudgetState) => void) | undefined;
     initServer({
       'budget/credit-card-state': () =>

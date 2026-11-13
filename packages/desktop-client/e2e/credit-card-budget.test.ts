@@ -97,13 +97,28 @@ for (const viewport of [
       } else {
         await page.goto('/budget');
       }
-      const panel = page.getByTestId('credit-card-payments').first();
-      await expect(panel).toContainText('Available to pay 60.00');
-      await expect(panel).toContainText('Debt not covered 200.00');
+      const openCardDetails = async () => {
+        const balance =
+          viewport.name === 'mobile'
+            ? page.getByRole('button', {
+                name: 'Open balance menu for Test card category',
+                exact: true,
+              })
+            : page
+                .getByRole('button', { name: /Card payment.*60\.00/ })
+                .first();
+        await balance.click();
+        return page.getByTestId('credit-card-details');
+      };
+      const panel = await openCardDetails();
+      await expect(panel).toContainText('Available to pay60.00');
+      await expect(panel).toContainText('Debt not covered200.00');
+      await page.keyboard.press('Escape');
       await page.reload();
-      await expect(
-        page.getByTestId('credit-card-payments').first(),
-      ).toContainText('Available to pay 60.00');
+      await expect(await openCardDetails()).toContainText(
+        'Available to pay60.00',
+      );
+      await page.keyboard.press('Escape');
 
       await page.evaluate(async ({ otherCardId, expenseId }) => {
         await window.$send('transaction-add', {
@@ -114,7 +129,11 @@ for (const viewport of [
           date: '2017-01-11',
         });
       }, fixture);
-      await expect(panel).toContainText('Credit overspending 20.00');
+      await expect(
+        page
+          .getByRole('img', { name: 'Credit overspending', exact: true })
+          .first(),
+      ).toBeVisible();
       await expect(page.getByRole('alert')).toHaveCount(0);
       await page.evaluate(async ({ expenseId }) => {
         await window.$send('budget/budget-amount', {
@@ -123,7 +142,9 @@ for (const viewport of [
           amount: 12000,
         });
       }, fixture);
-      await expect(page.getByTestId('credit-card-payments')).toBeVisible();
+      await expect(
+        page.getByRole('img', { name: 'Credit overspending', exact: true }),
+      ).toHaveCount(0);
       await expect(page.getByRole('alert')).toHaveCount(0);
 
       await page.evaluate(async ({ cardId }) => {
@@ -140,7 +161,24 @@ for (const viewport of [
           date: '2017-01-20',
         });
       }, fixture);
-      await expect(panel).toContainText('Excess reserve 60.00');
+      await expect(
+        page
+          .getByRole('img', { name: 'Card payment has excess reserves' })
+          .first(),
+      ).toBeVisible();
+      if (viewport.name === 'desktop') {
+        await page
+          .getByRole('button', {
+            name: /Card payment has excess reserves.*60\.00/,
+          })
+          .first()
+          .click();
+      } else {
+        await openCardDetails();
+      }
+      await expect(panel).toContainText('Excess reserve60.00');
+      await page.keyboard.press('Escape');
+      await expect(page.getByTestId('credit-card-payments')).toHaveCount(0);
       await expect(page.getByRole('alert')).toHaveCount(0);
       await expect(page.getByTestId('budget-table')).toBeVisible();
     } finally {

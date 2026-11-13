@@ -628,6 +628,14 @@ export async function importTransactions(
   const orphanSubtransferTrxId = [] as string[];
   const orphanSubtransferAcctIdByTrxIdMap = new Map<string, string>();
   const orphanSubtransferDateByTrxIdMap = new Map<string, string>();
+  const sourceOrder = new Map([
+    ...data.transactions.map(
+      (transaction, index) => [transaction.id, -index] as const,
+    ),
+    ...data.subtransactions.map(
+      (transaction, index) => [transaction.id, -index] as const,
+    ),
+  ]);
 
   // Go ahead and generate ids for all of the transactions so we can
   // reliably resolve transfers
@@ -800,7 +808,9 @@ export async function importTransactions(
             account: entityIdMap.get(transaction.account_id),
             date: transaction.date,
             amount: amountFromYnab(transaction.amount),
-            ...(preserveSourceIds && { sort_order: 0 }),
+            ...(preserveSourceIds && {
+              sort_order: sourceOrder.get(transaction.id) ?? 0,
+            }),
             category: entityIdMap.get(transaction.category_id) || null,
             cleared: ['cleared', 'reconciled'].includes(transaction.cleared),
             reconciled: transaction.cleared === 'reconciled',
@@ -819,7 +829,9 @@ export async function importTransactions(
                   return {
                     id: entityIdMap.get(subtrans.id),
                     amount: amountFromYnab(subtrans.amount),
-                    ...(preserveSourceIds && { sort_order: 0 }),
+                    ...(preserveSourceIds && {
+                      sort_order: sourceOrder.get(subtrans.id) ?? 0,
+                    }),
                     category: entityIdMap.get(subtrans.category_id) || null,
                     notes: subtrans.memo,
                     transfer_id:

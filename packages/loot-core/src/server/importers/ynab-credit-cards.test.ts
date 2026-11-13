@@ -227,6 +227,55 @@ afterAll(async () => {
 });
 
 describe('card-aware native YNAB import', () => {
+  it('preserves same-day export order when an overpayment creates spendable card cash', async () => {
+    const data = exportData();
+    data.accounts[0].balance = data.accounts[0].cleared_balance = 900000;
+    data.accounts[1].balance = data.accounts[1].cleared_balance = 0;
+    const cashOpening = data.transactions[0];
+    const cardOpening = { ...data.transactions[1], amount: 0 };
+    const cashPayment = {
+      ...data.transactions[3],
+      id: 'y-payment-source',
+      amount: -100000,
+      transfer_transaction_id: 'z-payment-target',
+      date: '2017-01-10',
+    };
+    const cardPayment = {
+      ...data.transactions[4],
+      id: 'z-payment-target',
+      amount: 100000,
+      transfer_transaction_id: 'y-payment-source',
+      date: '2017-01-10',
+    };
+    const purchase = {
+      ...data.transactions[2],
+      id: 'a-purchase',
+      amount: -100000,
+    };
+    data.transactions = [
+      cardPayment,
+      cashPayment,
+      purchase,
+      cardOpening,
+      cashOpening,
+    ];
+    data.months[0].categories = [
+      category('food', 'Food', 'expenses', 100000, -100000, 0),
+      category('payment', 'Card', 'cards', 100000, -100000, 0),
+    ];
+    data.months[0].budgeted = 200000;
+    data.months[0].to_be_budgeted = 900000;
+    const result = await importData(data);
+    expect(result.error).toBeUndefined();
+    expect(result.meta).toMatchObject({ status: 'matched' });
+    expect(
+      await handlers['budget/credit-card-state']({ month: '2017-01' }),
+    ).toMatchObject({
+      status: 'ready',
+      toBudget: 90000,
+      cards: [{ balance: 0, fundedSpending: 0, paymentAvailable: 0 }],
+    });
+  });
   it('preserves payment categories, allocations, balances, and stays local until reviewed', async () => {
     const result = await importData(exportData());
     expect(result.error).toBeUndefined();

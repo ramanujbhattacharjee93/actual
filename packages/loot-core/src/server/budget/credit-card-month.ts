@@ -413,8 +413,8 @@ function fundCreditSpending(
       const matching = purchases
         .filter(purchase => purchase.accountId === event.accountId)
         .reverse();
-      // Refund unfunded purchases first, then return funded cash to the
-      // spending category. Any remainder reverses a prior month's reserve.
+      // Refund this card's purchases first. Without cash funding, a refund
+      // can also cancel another card's unfunded spending in the same category.
       for (const purchase of matching) {
         const amount = Math.min(refund, sum(purchase.amount, -purchase.funded));
         purchase.amount = sum(purchase.amount, -amount);
@@ -428,6 +428,17 @@ function fundCreditSpending(
         funds = sum(funds, amount);
         change(event.accountId, -amount);
       }
+      for (const purchase of purchases
+        .filter(
+          purchase =>
+            startingFunds <= 0 && purchase.accountId !== event.accountId,
+        )
+        .reverse()) {
+        const amount = Math.min(refund, sum(purchase.amount, -purchase.funded));
+        purchase.amount = sum(purchase.amount, -amount);
+        refund = sum(refund, -amount);
+      }
+      // Only the remaining refund releases cash from an existing reserve.
       funds = sum(funds, refund);
       change(event.accountId, -refund);
     }

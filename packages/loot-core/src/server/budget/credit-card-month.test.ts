@@ -242,6 +242,88 @@ describe('native credit-card accounting', () => {
     });
   });
 
+  it.each([
+    { food: 0, refund: 2000, fundedSpending: 0 },
+    { food: -3000, refund: 5000, fundedSpending: -3000 },
+  ])(
+    'nets a cross-card refund against unfunded spending with $food assigned',
+    ({ food, refund, fundedSpending }) => {
+      const result = calculate({
+        food,
+        payment: 5000,
+        transactions: [
+          tx({
+            id: 'other-opening',
+            account: 'other-card',
+            category: 'income',
+            amount: -20000,
+            date: 20170101,
+            starting_balance_flag: 1,
+          }),
+          tx({ id: 'purchase', account: 'other-card', amount: -2000 }),
+          tx({ id: 'refund', amount: refund, date: 20170120 }),
+        ],
+      });
+      expect(result.categories.food.available).toBe(0);
+      expect(result.cards).toMatchObject([
+        { fundedSpending, paymentAvailable: 5000 + fundedSpending },
+        { fundedSpending: 0, paymentAvailable: 0 },
+      ]);
+    },
+  );
+
+  it('reverses the receiving reserve when cash-funded spending is refunded to another card', () => {
+    const result = calculate({
+      food: 5000,
+      payment: 5000,
+      transactions: [
+        tx({
+          id: 'other-opening',
+          account: 'other-card',
+          category: 'income',
+          amount: -20000,
+          date: 20170101,
+          starting_balance_flag: 1,
+        }),
+        tx({ id: 'purchase', account: 'other-card', amount: -10000 }),
+        tx({ id: 'refund', amount: 5000, date: 20170120 }),
+      ],
+    });
+    expect(result.cards).toMatchObject([
+      { fundedSpending: -5000, paymentAvailable: 0 },
+      { fundedSpending: 10000, paymentAvailable: 10000 },
+    ]);
+  });
+
+  it('conserves cash when a cross-card refund offsets mixed cash and credit overspending', () => {
+    const result = calculate({
+      payment: 5000,
+      transactions: [
+        tx({
+          id: 'other-opening',
+          account: 'other-card',
+          category: 'income',
+          amount: -20000,
+          date: 20170101,
+          starting_balance_flag: 1,
+        }),
+        tx({ id: 'cash-spending', account: 'cash', amount: -10000 }),
+        tx({ id: 'purchase', account: 'other-card', amount: -2000 }),
+        tx({ id: 'refund', amount: 5000, date: 20170120 }),
+      ],
+    });
+    expect(result.categories.food).toMatchObject({
+      available: -7000,
+      cashOverspent: 7000,
+      creditOverspent: 0,
+    });
+    expect(result.cards).toMatchObject([
+      { fundedSpending: -3000, paymentAvailable: 2000 },
+      { fundedSpending: 0, paymentAvailable: 0 },
+    ]);
+    expect(result.cashBalance).toBe(90000);
+  });
+
   it('adds cash advances to assignable cash without funding payment reserves', () => {
     const result = calculate({ transactions: transfer('card', 'cash', 6000) });
     expect(result).toMatchObject({
